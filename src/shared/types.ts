@@ -18,6 +18,7 @@ export type TranslationBatch = {
 
 export type TranslationBatchResult = {
   items: TranslationResultItem[];
+  costToman?: number;
 };
 
 export type AppSettings = {
@@ -80,4 +81,8 @@ export type TranslationComplete = {
 
 export type ExclusionModeState = {
   enabled: boolean;
+};
+
+export type OnlineCostState = {
+  totalToman: number;
 };

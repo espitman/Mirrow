@@ -7,6 +7,7 @@ import type {
   ExclusionModeState,
   HistoryItem,
   LmStudioStatus,
+  OnlineCostState,
   TranslationBatch,
   TranslationComplete,
   TranslationProgress,
@@ -45,6 +46,11 @@ declare global {
       };
       lmStudio: {
         checkConnection: () => Promise<LmStudioStatus>;
+      };
+      onlineCost: {
+        get: () => Promise<OnlineCostState>;
+        reset: () => Promise<OnlineCostState>;
+        onUpdate: (callback: (state: OnlineCostState) => void) => () => void;
       };
     };
   }

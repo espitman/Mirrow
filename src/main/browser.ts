@@ -18,6 +18,7 @@ export class BrowserController {
   private view: BrowserView | null = null;
   private bounds: BrowserBounds | null = null;
   private exclusionModeEnabled = false;
+  private onlineCostToman = 0;
 
   constructor(private readonly window: BrowserWindow) {}
 
@@ -122,6 +123,16 @@ export class BrowserController {
     return (await this.view?.webContents.executeJavaScript(script, true)) ?? 0;
   }
 
+  getOnlineCost() {
+    return { totalToman: Math.round(this.onlineCostToman) };
+  }
+
+  resetOnlineCost() {
+    this.onlineCostToman = 0;
+    this.emitOnlineCost();
+    return this.getOnlineCost();
+  }
+
   getState(): BrowserState {
     const contents = this.view?.webContents;
     return {
@@ -163,6 +174,10 @@ export class BrowserController {
         );
         await this.applyTranslations(result.items);
         translatedCount += result.items.length;
+        if (Number.isFinite(result.costToman)) {
+          this.onlineCostToman += result.costToman ?? 0;
+          this.emitOnlineCost();
+        }
       } catch (error) {
         partialFailure = true;
         this.sendError(readError(error));
@@ -396,6 +411,10 @@ export class BrowserController {
 
   private sendError(message: string) {
     this.window.webContents.send("translate:error", message);
+  }
+
+  private emitOnlineCost() {
+    this.window.webContents.send("online-cost:update", this.getOnlineCost());
   }
 }
 

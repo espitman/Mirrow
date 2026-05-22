@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { BookOpenText, Clock3, Languages, MonitorCog, Settings, Sparkles } from "lucide-react";
-import { useLmStudioStatusQuery, useSettingsQuery } from "../lib/hooks";
+import { useLmStudioStatusQuery, useSettingsQuery, useUpdateSettingsMutation } from "../lib/hooks";
 import { StatusBadge } from "./StatusBadge";
 
 const navItems = [
@@ -13,7 +14,19 @@ const navItems = [
 export function Sidebar() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const settings = useSettingsQuery();
+  const updateSettings = useUpdateSettingsMutation();
   const status = useLmStudioStatusQuery();
+  const [onlineCost, setOnlineCost] = useState(0);
+
+  useEffect(() => {
+    window.mirrow.onlineCost.get().then((state) => setOnlineCost(state.totalToman)).catch(() => undefined);
+    return window.mirrow.onlineCost.onUpdate((state) => setOnlineCost(state.totalToman));
+  }, []);
+
+  const selectedEngine = settings.data?.translationEngine ?? "online";
+  const setEngine = (translationEngine: "online" | "local") => {
+    updateSettings.mutate({ translationEngine });
+  };
 
   return (
     <aside className="drag-region flex h-full w-[292px] shrink-0 flex-col border-r border-white/10 bg-black/20 px-4 pb-4 pt-12 backdrop-blur-xl">
@@ -68,6 +81,34 @@ export function Sidebar() {
               Change
             </Link>
           </div>
+          <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-black/20 p-1 text-xs">
+            <button
+              className={`rounded-md px-2 py-1.5 transition ${selectedEngine === "online" ? "bg-violet text-white" : "text-slate-300 hover:bg-white/[0.08]"}`}
+              onClick={() => setEngine("online")}
+            >
+              Online
+            </button>
+            <button
+              className={`rounded-md px-2 py-1.5 transition ${selectedEngine === "local" ? "bg-violet text-white" : "text-slate-300 hover:bg-white/[0.08]"}`}
+              onClick={() => setEngine("local")}
+            >
+              Local
+            </button>
+          </div>
+          {selectedEngine === "online" && (
+            <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs uppercase text-slate-500">Online cost</span>
+                <button
+                  className="text-xs text-slate-400 hover:text-white"
+                  onClick={() => window.mirrow.onlineCost.reset().then((state) => setOnlineCost(state.totalToman))}
+                >
+                  Reset
+                </button>
+              </div>
+              <div className="mt-1 text-lg font-semibold text-white">{Math.round(onlineCost).toLocaleString("fa-IR")} تومان</div>
+            </div>
+          )}
         </section>
 
         <section className="rounded-xl border border-white/10 bg-white/[0.04] p-4">

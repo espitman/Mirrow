@@ -41,6 +41,8 @@ export function BrowserShell() {
     return () => {
       resizeObserver.disconnect();
       window.removeEventListener("resize", syncBounds);
+      window.mirrow.browser.setExclusionMode(false).catch(() => undefined);
+      window.mirrow.browser.setBounds({ x: 0, y: 0, width: 0, height: 0 }).catch(() => undefined);
     };
   }, [syncBounds]);
 

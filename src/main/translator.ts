@@ -68,19 +68,20 @@ export async function translateBatch(
 
   const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const content = data?.choices?.[0]?.message?.content;
+  const costToman = settings.translationEngine === "online" ? extractProviderCostToman(data) : undefined;
 
   if (!content) {
     throw new Error("Empty response from LM Studio");
   }
 
   try {
-    return validateTranslationResult(parseTranslationJson(content), batch);
+    return withCost(validateTranslationResult(parseTranslationJson(content), batch), costToman);
   } catch (error) {
     const repaired = await repairTranslationJson(content, batch, settings).catch(() => null);
-    if (repaired) return validateTranslationResult(repaired, batch);
+    if (repaired) return withCost(validateTranslationResult(repaired, batch), costToman);
 
     const salvaged = salvageTranslationJson(content);
-    if (salvaged) return validateTranslationResult(salvaged, batch);
+    if (salvaged) return withCost(validateTranslationResult(salvaged, batch), costToman);
 
     const individual = await translateItemsIndividually(batch, settings).catch(() => null);
     if (individual?.items.length) return validateTranslationResult(individual, batch);
@@ -90,12 +91,12 @@ export async function translateBatch(
       raw: content.slice(0, 2000),
     });
 
-    return {
+    return withCost({
       items: batch.items.map((item) => ({
         id: item.id,
         translation: item.text,
       })),
-    };
+    }, costToman);
   }
 }
 
@@ -129,7 +130,12 @@ function validateTranslationResult(result: TranslationBatchResult, batch: Transl
     items: result.items
       .filter((item) => validIds.has(item.id) && typeof item.translation === "string")
       .map((item) => ({ id: item.id, translation: item.translation })),
+    costToman: result.costToman,
   };
+}
+
+function withCost(result: TranslationBatchResult, costToman?: number): TranslationBatchResult {
+  return Number.isFinite(costToman) ? { ...result, costToman } : result;
 }
 
 function normalizeTranslationJson(value: unknown): TranslationBatchResult {
@@ -280,6 +286,7 @@ async function translateItemsIndividually(
   settings: AppSettings,
 ): Promise<TranslationBatchResult> {
   const items = [];
+  let totalCostToman = 0;
 
   for (const item of batch.items) {
   const response = await fetch(settings.lmStudioBaseUrl, {
@@ -307,6 +314,8 @@ async function translateItemsIndividually(
     }
 
     const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const costToman = settings.translationEngine === "online" ? extractProviderCostToman(data) : undefined;
+    if (Number.isFinite(costToman)) totalCostToman += costToman ?? 0;
     const raw = data?.choices?.[0]?.message?.content;
     items.push({
       id: item.id,
@@ -314,7 +323,7 @@ async function translateItemsIndividually(
     });
   }
 
-  return { items };
+  return totalCostToman > 0 ? { items, costToman: totalCostToman } : { items };
 }
 
 async function checkOnlineConnection(settings: AppSettings): Promise<LmStudioStatus> {
@@ -391,4 +400,58 @@ function cleanPlainTranslation(raw: string) {
     .replace(/^["']|["']$/g, "")
     .replace(/^(translation|translated text|persian)\s*:\s*/i, "")
     .trim();
+}
+
+function extractProviderCostToman(value: unknown): number | undefined {
+  const preferredKeys = [
+    "total_cost_toman",
+    "cost_toman",
+    "total_price_toman",
+    "price_toman",
+    "total_cost",
+    "cost",
+    "total_price",
+    "price",
+  ];
+
+  for (const key of preferredKeys) {
+    const found = findNumericByKey(value, key);
+    if (found !== undefined) return Math.round(found);
+  }
+
+  return undefined;
+}
+
+function findNumericByKey(value: unknown, expectedKey: string): number | undefined {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findNumericByKey(item, expectedKey);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+
+  if (!value || typeof value !== "object") return undefined;
+
+  for (const [key, nestedValue] of Object.entries(value)) {
+    const normalized = key.toLowerCase();
+    if (normalized === expectedKey || normalized.endsWith(`_${expectedKey}`)) {
+      const numeric = numericValue(nestedValue);
+      if (numeric !== undefined) return numeric;
+    }
+
+    const nested = findNumericByKey(nestedValue, expectedKey);
+    if (nested !== undefined) return nested;
+  }
+
+  return undefined;
+}
+
+function numericValue(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.trim().replace(/,/g, ""));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
 }

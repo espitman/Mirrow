@@ -32,7 +32,7 @@ export function SettingsPage() {
     <section className="h-full overflow-auto p-8">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold text-white">Settings</h1>
-        <p className="mt-1 text-sm text-slate-400">Configure LM Studio, batching, and default translation language.</p>
+        <p className="mt-1 text-sm text-slate-400">Configure online/local engines, batching, and default translation language.</p>
       </header>
 
       <form onSubmit={submit} className="glass max-w-3xl rounded-xl p-6">
