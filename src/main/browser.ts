@@ -433,12 +433,6 @@ export class BrowserController {
           let button = Array.from(host.children).find((child) => child.classList.contains("mirrow-retranslate-button"));
           if (button) return;
 
-          const computedPosition = window.getComputedStyle(host).position;
-          if (computedPosition === "static") {
-            host.style.position = "relative";
-          }
-          host.style.setProperty("padding-inline-end", "38px", "important");
-
           button = document.createElement("button");
           button.type = "button";
           button.className = "mirrow-retranslate-button";
@@ -451,16 +445,16 @@ export class BrowserController {
             "width:28px",
             "height:28px",
             "padding:0",
+            "margin-inline-start:8px",
             "border-radius:6px",
             "border:1px solid rgba(139,92,246,.5)",
             "background:rgba(139,92,246,.16)",
             "color:#7c3aed",
             "font:600 16px system-ui",
             "cursor:pointer",
-            "position:absolute",
-            "inset-inline-end:4px",
-            "top:50%",
-            "transform:translateY(-50%)",
+            "position:static",
+            "vertical-align:baseline",
+            "transform:none",
             "z-index:2147483647"
           ].join(";");
           button.addEventListener("click", (event) => {
