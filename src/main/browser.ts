@@ -135,6 +135,7 @@ export class BrowserController {
         const nodes = document.querySelectorAll("[data-mirrow-skip='true']");
         for (const node of nodes) {
           node.removeAttribute("data-mirrow-skip");
+          node.classList.remove("mirrow-dimmed");
           node.style.removeProperty("outline");
           node.style.removeProperty("outline-offset");
           node.style.removeProperty("cursor");
@@ -157,6 +158,7 @@ export class BrowserController {
         const nodes = document.querySelectorAll("[data-mirrow-include='true']");
         for (const node of nodes) {
           node.removeAttribute("data-mirrow-include");
+          node.classList.remove("mirrow-focus-target");
           node.style.removeProperty("outline");
           node.style.removeProperty("outline-offset");
           node.style.removeProperty("box-shadow");
@@ -205,6 +207,8 @@ export class BrowserController {
     let completed = 0;
     let translatedCount = 0;
     let partialFailure = false;
+
+    await this.applyTranslationFocus(Boolean(options.selectedOnly));
 
     for (let index = 0; index < items.length; index += batchSize) {
       if (this.translationCancelled) break;
@@ -379,7 +383,9 @@ export class BrowserController {
           style.textContent = [
             "@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap');",
             ".mirrow-persian-text{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;font-family:Vazirmatn,Vazir,Tahoma,Arial,sans-serif!important;}",
-            ".mirrow-retranslate-button{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;direction:ltr!important;text-align:center!important;}"
+            ".mirrow-retranslate-button{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;direction:ltr!important;text-align:center!important;}",
+            ".mirrow-dimmed{opacity:.16!important;filter:saturate(.45)!important;transition:opacity .2s ease,filter .2s ease!important;}",
+            ".mirrow-focus-target{opacity:1!important;filter:none!important;}"
           ].join("\\n");
           document.head.appendChild(style);
         }
@@ -502,8 +508,6 @@ export class BrowserController {
 
         if (!${JSON.stringify(enabled)}) return false;
 
-        const previousOutline = new WeakMap();
-
         function isIgnored(el) {
           return !el ||
             el === document.documentElement ||
@@ -515,32 +519,11 @@ export class BrowserController {
         function onMouseOver(event) {
           const el = event.target;
           if (isIgnored(el)) return;
-          if (!previousOutline.has(el)) {
-            previousOutline.set(el, {
-              outline: el.style.outline,
-              outlineOffset: el.style.outlineOffset,
-            });
-          }
-          el.style.outline = "2px solid #a855f7";
-          el.style.outlineOffset = "2px";
         }
 
         function onMouseOut(event) {
           const el = event.target;
           if (isIgnored(el)) return;
-          if (el.dataset.mirrowSkip === "true") {
-            el.style.outline = "2px solid #fb7185";
-            el.style.outlineOffset = "2px";
-            return;
-          }
-          const previous = previousOutline.get(el);
-          if (previous) {
-            el.style.outline = previous.outline;
-            el.style.outlineOffset = previous.outlineOffset;
-          } else {
-            el.style.removeProperty("outline");
-            el.style.removeProperty("outline-offset");
-          }
         }
 
         function onClick(event) {
@@ -552,7 +535,9 @@ export class BrowserController {
 
           if (el.dataset.mirrowSkip === "true") {
             el.removeAttribute("data-mirrow-skip");
-            el.style.outline = "2px solid #a855f7";
+            el.classList.remove("mirrow-dimmed");
+            el.style.removeProperty("outline");
+            el.style.removeProperty("outline-offset");
             if (el.dataset.mirrowPreviousOpacity !== undefined) {
               el.style.opacity = el.dataset.mirrowPreviousOpacity;
               delete el.dataset.mirrowPreviousOpacity;
@@ -564,10 +549,9 @@ export class BrowserController {
             if (el.dataset.mirrowPreviousOpacity === undefined) {
               el.dataset.mirrowPreviousOpacity = el.style.opacity || "";
             }
-            el.style.opacity = "0.38";
-            el.style.outline = "2px solid #fb7185";
+            el.style.removeProperty("outline");
+            el.style.removeProperty("outline-offset");
           }
-          el.style.outlineOffset = "2px";
         }
 
         document.documentElement.style.cursor = "crosshair";
@@ -613,16 +597,12 @@ export class BrowserController {
 
         function onMouseOver(event) {
           const el = event.target;
-          if (isIgnored(el) || el.dataset.mirrowInclude === "true") return;
-          el.style.outline = "2px solid #38bdf8";
-          el.style.outlineOffset = "2px";
+          return;
         }
 
         function onMouseOut(event) {
           const el = event.target;
-          if (isIgnored(el) || el.dataset.mirrowInclude === "true") return;
-          el.style.removeProperty("outline");
-          el.style.removeProperty("outline-offset");
+          if (isIgnored(el)) return;
         }
 
         function onClick(event) {
@@ -634,14 +614,11 @@ export class BrowserController {
 
           if (el.dataset.mirrowInclude === "true") {
             el.removeAttribute("data-mirrow-include");
-            el.style.outline = "2px solid #38bdf8";
-            el.style.removeProperty("box-shadow");
+            el.classList.remove("mirrow-focus-target");
           } else {
             el.dataset.mirrowInclude = "true";
-            el.style.outline = "2px solid #22c55e";
-            el.style.boxShadow = "0 0 0 9999px rgba(34, 197, 94, 0.04) inset";
+            el.classList.add("mirrow-focus-target");
           }
-          el.style.outlineOffset = "2px";
         }
 
         document.documentElement.style.cursor = "copy";
@@ -657,6 +634,44 @@ export class BrowserController {
         };
 
         return true;
+      })();
+    `;
+
+    await this.view.webContents.executeJavaScript(script, true);
+  }
+
+  private async applyTranslationFocus(selectedOnly: boolean) {
+    if (!this.view) return;
+
+    const script = `
+      (() => {
+        const styleId = "mirrow-vazirmatn-font";
+        if (!document.getElementById(styleId)) {
+          const style = document.createElement("style");
+          style.id = styleId;
+          style.textContent = [
+            "@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap');",
+            ".mirrow-persian-text{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;font-family:Vazirmatn,Vazir,Tahoma,Arial,sans-serif!important;}",
+            ".mirrow-retranslate-button{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;direction:ltr!important;text-align:center!important;}",
+            ".mirrow-dimmed{opacity:.16!important;filter:saturate(.45)!important;transition:opacity .2s ease,filter .2s ease!important;}",
+            ".mirrow-focus-target{opacity:1!important;filter:none!important;}"
+          ].join("\\n");
+          document.head.appendChild(style);
+        }
+
+        document.querySelectorAll(".mirrow-dimmed").forEach((el) => el.classList.remove("mirrow-dimmed"));
+
+        if (${JSON.stringify(selectedOnly)}) {
+          const selected = new Set(Array.from(document.querySelectorAll("[data-mirrow-include='true']")));
+          for (const child of Array.from(document.body.children)) {
+            const containsSelected = Array.from(selected).some((node) => child === node || child.contains(node));
+            if (!containsSelected) child.classList.add("mirrow-dimmed");
+          }
+          selected.forEach((node) => node.classList.add("mirrow-focus-target"));
+          return;
+        }
+
+        document.querySelectorAll("[data-mirrow-skip='true']").forEach((node) => node.classList.add("mirrow-dimmed"));
       })();
     `;
 
