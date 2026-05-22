@@ -19,6 +19,7 @@ export function registerIpc(browser: BrowserController) {
     "browser:clear-selections",
     "online-cost:get",
     "online-cost:reset",
+    "translate:cancel",
     "translate:start",
     "translate:batch",
     "settings:get",
@@ -46,8 +47,10 @@ export function registerIpc(browser: BrowserController) {
     return browser.translatePage({
       sourceLanguage: String(options?.sourceLanguage || "auto"),
       targetLanguage: String(options?.targetLanguage || "Persian"),
+      selectedOnly: Boolean(options?.selectedOnly),
     });
   });
+  ipcMain.handle("translate:cancel", () => browser.cancelTranslation());
   ipcMain.handle("translate:batch", async (_event, batch: TranslationBatch) => {
     const settings = await getSettings();
     return translateBatch(batch, settings);

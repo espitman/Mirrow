@@ -21,6 +21,7 @@ export class BrowserController {
   private exclusionModeEnabled = false;
   private selectionModeEnabled = false;
   private onlineCostToman = 0;
+  private translationCancelled = false;
 
   constructor(private readonly window: BrowserWindow) {}
 
@@ -51,6 +52,11 @@ export class BrowserController {
     this.view.webContents.on("page-title-updated", () => this.emitState());
     this.view.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
       if (code !== -3 && isMainFrame) this.sendError(`Website failed to load: ${description || url}`);
+    });
+    this.view.webContents.on("console-message", (_event, _level, message) => {
+      if (!message.startsWith("__MIRROW_RETRANSLATE__:")) return;
+      const id = message.slice("__MIRROW_RETRANSLATE__:".length).trim();
+      this.retranslateNode(id).catch((error: unknown) => this.sendError(readError(error)));
     });
 
     if (this.bounds) this.setBounds(this.bounds);
@@ -95,6 +101,12 @@ export class BrowserController {
   async reload() {
     this.view?.webContents.reload();
     return this.getState();
+  }
+
+  cancelTranslation() {
+    this.translationCancelled = true;
+    this.sendProgress({ completed: 0, total: 0, message: "Cancelling translation..." });
+    return { cancelled: true };
   }
 
   async setExclusionMode(enabled: boolean): Promise<ExclusionModeState> {
@@ -181,6 +193,7 @@ export class BrowserController {
     if (!view || !view.webContents.getURL()) {
       throw new Error("Load a website before translating.");
     }
+    this.translationCancelled = false;
 
     const items = await this.collectVisibleTextNodes(Boolean(options.selectedOnly));
     if (!items.length) {
@@ -194,6 +207,7 @@ export class BrowserController {
     let partialFailure = false;
 
     for (let index = 0; index < items.length; index += batchSize) {
+      if (this.translationCancelled) break;
       const batchItems = items.slice(index, index + batchSize);
       try {
         const result = await translateBatch(
@@ -223,6 +237,9 @@ export class BrowserController {
       });
     }
 
+    const wasCancelled = this.translationCancelled;
+    this.translationCancelled = false;
+
     if (partialFailure && translatedCount === 0) {
       throw new Error("Translation failed before any text could be translated.");
     }
@@ -243,8 +260,39 @@ export class BrowserController {
     });
 
     this.window.webContents.send("translate:complete", complete);
+    if (wasCancelled) this.sendError("Translation stopped.");
     if (partialFailure) this.sendError("Some parts of the page could not be translated.");
     return complete;
+  }
+
+  async retranslateNode(id: string) {
+    if (!this.view || !id) return;
+
+    const text = await this.view.webContents.executeJavaScript(
+      `
+        (() => {
+          const node = window.__mirrowNodeMap && window.__mirrowNodeMap.get(${JSON.stringify(id)});
+          return node ? (node.textContent || "").trim() : "";
+        })();
+      `,
+      true,
+    );
+
+    if (!text) return;
+
+    const settings = await getSettings();
+    const result = await translateBatch(
+      {
+        targetLanguage: settings.defaultTargetLanguage,
+        items: [{ id, text }],
+      },
+      settings,
+    );
+    await this.applyTranslations(result.items);
+    if (Number.isFinite(result.costToman)) {
+      this.onlineCostToman += result.costToman ?? 0;
+      this.emitOnlineCost();
+    }
   }
 
   private async collectVisibleTextNodes(selectedOnly: boolean): Promise<TranslationItem[]> {
@@ -263,9 +311,10 @@ export class BrowserController {
 
         function shouldSkipElement(el) {
           const tag = el.tagName.toLowerCase();
+          if (el.closest(".mirrow-retranslate-button")) return true;
           return [
             "script", "style", "noscript", "svg", "canvas", "input",
-            "textarea", "code", "pre", "iframe", "select", "option"
+            "textarea", "code", "pre", "iframe", "select", "option", "button"
           ].includes(tag);
         }
 
@@ -319,22 +368,85 @@ export class BrowserController {
         if (!document.getElementById(styleId)) {
           const style = document.createElement("style");
           style.id = styleId;
-          style.textContent = "@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap');";
+          style.textContent = [
+            "@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap');",
+            ".mirrow-persian-text{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;font-family:Vazirmatn,Vazir,Tahoma,Arial,sans-serif!important;}",
+            ".mirrow-retranslate-button{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;direction:ltr!important;text-align:center!important;}"
+          ].join("\\n");
           document.head.appendChild(style);
         }
         const nodeMap = window.__mirrowNodeMap;
         if (!nodeMap) return 0;
+
+        function nearestTextBlock(el) {
+          let current = el;
+          while (current && current !== document.body) {
+            const style = window.getComputedStyle(current);
+            const tag = current.tagName.toLowerCase();
+            if (
+              ["p", "li", "article", "section", "header", "footer", "main", "aside", "nav", "blockquote", "figcaption", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tag) ||
+              ["block", "list-item", "table-cell", "flex", "grid"].includes(style.display)
+            ) {
+              return current;
+            }
+            current = current.parentElement;
+          }
+          return el;
+        }
+
+        function forcePersianTypography(el) {
+          if (!el) return;
+          el.setAttribute("dir", "rtl");
+          el.classList.add("mirrow-persian-text");
+          el.style.setProperty("direction", "rtl", "important");
+          el.style.setProperty("text-align", "right", "important");
+          el.style.setProperty("unicode-bidi", "plaintext", "important");
+          el.style.setProperty("font-family", "Vazirmatn, Vazir, Tahoma, Arial, sans-serif", "important");
+        }
+
+        function ensureRetranslateButton(el, id) {
+          const host = nearestTextBlock(el);
+          if (!host || Array.from(host.children).some((child) => child.classList.contains("mirrow-retranslate-button") && child.dataset.mirrowNodeId === id)) return;
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "mirrow-retranslate-button";
+          button.dataset.mirrowNodeId = id;
+          button.textContent = "↻";
+          button.title = "Retranslate this part";
+          button.style.cssText = [
+            "display:inline-flex",
+            "align-items:center",
+            "justify-content:center",
+            "width:22px",
+            "height:22px",
+            "margin-inline-start:6px",
+            "border-radius:6px",
+            "border:1px solid rgba(139,92,246,.5)",
+            "background:rgba(139,92,246,.16)",
+            "color:#7c3aed",
+            "font:600 14px system-ui",
+            "cursor:pointer",
+            "vertical-align:middle",
+            "position:relative",
+            "z-index:2147483647"
+          ].join(";");
+          button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            console.log("__MIRROW_RETRANSLATE__:" + id);
+          });
+          host.appendChild(button);
+        }
+
         let count = 0;
         for (const item of translations) {
           const node = nodeMap.get(item.id);
           if (node && item.translation) {
             node.textContent = item.translation;
             if (/[\u0600-\u06FF]/.test(item.translation) && node.parentElement) {
-              node.parentElement.setAttribute("dir", "rtl");
-              node.parentElement.style.setProperty("direction", "rtl", "important");
-              node.parentElement.style.setProperty("text-align", "right", "important");
-              node.parentElement.style.setProperty("unicode-bidi", "plaintext", "important");
-              node.parentElement.style.setProperty("font-family", "Vazirmatn, Vazir, Tahoma, Arial, sans-serif", "important");
+              forcePersianTypography(node.parentElement);
+              forcePersianTypography(nearestTextBlock(node.parentElement));
+              ensureRetranslateButton(node.parentElement, item.id);
             }
             count += 1;
           }
@@ -369,6 +481,7 @@ export class BrowserController {
           return !el ||
             el === document.documentElement ||
             el === document.body ||
+            el.closest(".mirrow-retranslate-button") ||
             ["HTML", "BODY", "SCRIPT", "STYLE", "NOSCRIPT", "IFRAME"].includes(el.tagName);
         }
 
@@ -467,6 +580,7 @@ export class BrowserController {
           return !el ||
             el === document.documentElement ||
             el === document.body ||
+            el.closest(".mirrow-retranslate-button") ||
             ["HTML", "BODY", "SCRIPT", "STYLE", "NOSCRIPT", "IFRAME"].includes(el.tagName);
         }
 

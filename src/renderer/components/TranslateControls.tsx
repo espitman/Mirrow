@@ -1,4 +1,4 @@
-import { CheckSquare, Eraser, Languages, MousePointer2 } from "lucide-react";
+import { CheckSquare, Eraser, Languages, MousePointer2, Square } from "lucide-react";
 import { LANGUAGE_OPTIONS } from "../../shared/constants";
 import type { TranslationProgress } from "../../shared/types";
 
@@ -14,6 +14,7 @@ type TranslateControlsProps = {
   onSourceLanguageChange: (value: string) => void;
   onTargetLanguageChange: (value: string) => void;
   onTranslate: () => void;
+  onCancel: () => void;
   onToggleExclusionMode: () => void;
   onClearExclusions: () => void;
   onToggleSelectionMode: () => void;
@@ -33,6 +34,7 @@ export function TranslateControls({
   onSourceLanguageChange,
   onTargetLanguageChange,
   onTranslate,
+  onCancel,
   onToggleExclusionMode,
   onClearExclusions,
   onToggleSelectionMode,
@@ -48,6 +50,12 @@ export function TranslateControls({
           <Languages size={17} />
           {isTranslating ? "Translating" : translationScope === "pick" ? "Translate Picked" : "Translate Page"}
         </button>
+        {isTranslating && (
+          <button type="button" className="secondary-button border-rose-400/40 text-rose-200" onClick={onCancel}>
+            <Square size={14} />
+            Stop
+          </button>
+        )}
         <button
           type="button"
           className={translationScope === "full" ? "primary-button bg-slate-600 hover:bg-slate-600/90" : "secondary-button"}

@@ -33,6 +33,7 @@ declare global {
       };
       translation: {
         start: (options: TranslatePageOptions) => Promise<TranslationComplete>;
+        cancel: () => Promise<{ cancelled: boolean }>;
         translateBatch: (batch: TranslationBatch) => Promise<unknown>;
         onProgress: (callback: (progress: TranslationProgress) => void) => () => void;
         onError: (callback: (message: string) => void) => () => void;

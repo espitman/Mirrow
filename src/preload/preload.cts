@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld("mirrow", {
   },
   translation: {
     start: (options: TranslatePageOptions) => ipcRenderer.invoke("translate:start", options),
+    cancel: () => ipcRenderer.invoke("translate:cancel") as Promise<{ cancelled: boolean }>,
     translateBatch: (batch: TranslationBatch) => ipcRenderer.invoke("translate:batch", batch),
     onProgress: (callback: (progress: TranslationProgress) => void) => on("translate:progress", callback),
     onError: (callback: (message: string) => void) => on("translate:error", callback),

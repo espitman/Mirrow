@@ -109,6 +109,10 @@ export function BrowserShell() {
         onSourceLanguageChange={setSourceLanguage}
         onTargetLanguageChange={setTargetLanguage}
         onTranslate={translate}
+        onCancel={() => {
+          window.mirrow.translation.cancel().catch((nextError: Error) => setError(nextError.message));
+          setIsTranslating(false);
+        }}
         onToggleExclusionMode={() => {
           const next = !exclusionMode;
           setTranslationScope("exclude");
