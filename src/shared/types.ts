@@ -93,6 +93,10 @@ export type SelectionModeState = {
   enabled: boolean;
 };
 
+export type InstantTranslateModeState = {
+  enabled: boolean;
+};
+
 export type OnlineCostState = {
   totalToman: number;
 };

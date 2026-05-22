@@ -4,6 +4,7 @@ import type {
   BrowserBounds,
   BrowserState,
   HistoryItem,
+  InstantTranslateModeState,
   LmStudioModel,
   OnlineCostState,
   SelectionModeState,
@@ -32,6 +33,7 @@ contextBridge.exposeInMainWorld("mirrow", {
     clearExclusions: () => ipcRenderer.invoke("browser:clear-exclusions") as Promise<number>,
     setSelectionMode: (enabled: boolean) => ipcRenderer.invoke("browser:set-selection-mode", enabled) as Promise<SelectionModeState>,
     clearSelections: () => ipcRenderer.invoke("browser:clear-selections") as Promise<number>,
+    setInstantTranslateMode: (enabled: boolean) => ipcRenderer.invoke("browser:set-instant-translate-mode", enabled) as Promise<InstantTranslateModeState>,
     onState: (callback: (state: BrowserState) => void) => on("browser:state", callback),
   },
   translation: {

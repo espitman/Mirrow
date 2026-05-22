@@ -3,6 +3,7 @@ import type {
   BrowserBounds,
   BrowserState,
   ExclusionModeState,
+  InstantTranslateModeState,
   SelectionModeState,
   TranslationComplete,
   TranslationItem,
@@ -22,6 +23,7 @@ export class BrowserController {
   private bounds: BrowserBounds | null = null;
   private exclusionModeEnabled = false;
   private selectionModeEnabled = false;
+  private instantTranslateModeEnabled = false;
   private onlineCostToman = 0;
   private translationCancelled = false;
   private translationInProgress = false;
@@ -71,6 +73,13 @@ export class BrowserController {
         if (!options) return;
         this.dynamicPickQueue = this.dynamicPickQueue
           .then(() => this.translatePickedElement(token, options))
+          .catch((error: unknown) => this.sendError(readError(error)));
+      }
+      if (message.startsWith("__MIRROW_INSTANT_TRANSLATE__:")) {
+        const token = message.slice("__MIRROW_INSTANT_TRANSLATE__:".length).trim();
+        if (!token) return;
+        this.dynamicPickQueue = this.dynamicPickQueue
+          .then(() => this.translatePickedElement(token, { sourceLanguage: "auto", targetLanguage: "" }))
           .catch((error: unknown) => this.sendError(readError(error)));
       }
     });
@@ -131,6 +140,10 @@ export class BrowserController {
       this.selectionModeEnabled = false;
       await this.injectSelectionMode(false);
     }
+    if (enabled && this.instantTranslateModeEnabled) {
+      this.instantTranslateModeEnabled = false;
+      await this.injectInstantTranslateMode(false);
+    }
     await this.injectExclusionMode(enabled);
     return { enabled };
   }
@@ -141,7 +154,25 @@ export class BrowserController {
       this.exclusionModeEnabled = false;
       await this.injectExclusionMode(false);
     }
+    if (enabled && this.instantTranslateModeEnabled) {
+      this.instantTranslateModeEnabled = false;
+      await this.injectInstantTranslateMode(false);
+    }
     await this.injectSelectionMode(enabled);
+    return { enabled };
+  }
+
+  async setInstantTranslateMode(enabled: boolean): Promise<InstantTranslateModeState> {
+    this.instantTranslateModeEnabled = enabled;
+    if (enabled && this.exclusionModeEnabled) {
+      this.exclusionModeEnabled = false;
+      await this.injectExclusionMode(false);
+    }
+    if (enabled && this.selectionModeEnabled) {
+      this.selectionModeEnabled = false;
+      await this.injectSelectionMode(false);
+    }
+    await this.injectInstantTranslateMode(enabled);
     return { enabled };
   }
 
@@ -172,7 +203,7 @@ export class BrowserController {
   async clearSelections() {
     const script = `
       (() => {
-        const nodes = document.querySelectorAll("[data-mirrow-include='true'], .mirrow-picked-preview, .mirrow-focus-target, .mirrow-pick-hover");
+        const nodes = document.querySelectorAll("[data-mirrow-include='true'], .mirrow-picked-preview, .mirrow-focus-target, .mirrow-pick-hover, .mirrow-instant-hover");
         for (const node of nodes) {
           node.removeAttribute("data-mirrow-include");
           node.removeAttribute("data-mirrow-live-pick-id");
@@ -180,6 +211,7 @@ export class BrowserController {
           node.classList.remove("mirrow-focus-target");
           node.classList.remove("mirrow-picked-preview");
           node.classList.remove("mirrow-pick-hover");
+          node.classList.remove("mirrow-instant-hover");
           node.style.removeProperty("outline");
           node.style.removeProperty("outline-offset");
           node.style.removeProperty("box-shadow");
@@ -193,7 +225,7 @@ export class BrowserController {
   private async clearPickPreviews() {
     const script = `
       (() => {
-        const nodes = document.querySelectorAll("[data-mirrow-include='true'], .mirrow-picked-preview, .mirrow-focus-target, .mirrow-pick-hover");
+        const nodes = document.querySelectorAll("[data-mirrow-include='true'], .mirrow-picked-preview, .mirrow-focus-target, .mirrow-pick-hover, .mirrow-instant-hover");
         for (const node of nodes) {
           node.removeAttribute("data-mirrow-include");
           node.removeAttribute("data-mirrow-live-pick-id");
@@ -201,6 +233,7 @@ export class BrowserController {
           node.classList.remove("mirrow-focus-target");
           node.classList.remove("mirrow-picked-preview");
           node.classList.remove("mirrow-pick-hover");
+          node.classList.remove("mirrow-instant-hover");
           node.style.removeProperty("outline");
           node.style.removeProperty("outline-offset");
           node.style.removeProperty("box-shadow");
@@ -388,6 +421,11 @@ export class BrowserController {
       this.onlineCostToman += result.costToman ?? 0;
       this.emitOnlineCost();
     }
+    this.sendProgress({
+      completed: result.items.length,
+      total: items.length,
+      message: `Translated picked section (${result.items.length} / ${items.length})`,
+    });
   }
 
   private async translatePickedElement(token: string, options: TranslatePageOptions) {
@@ -816,7 +854,7 @@ export class BrowserController {
         function clearPickPreview(el) {
           let current = el;
           while (current && current !== document.body) {
-            current.classList.remove("mirrow-picked-preview", "mirrow-focus-target", "mirrow-pick-hover");
+            current.classList.remove("mirrow-picked-preview", "mirrow-focus-target", "mirrow-pick-hover", "mirrow-instant-hover");
             current.removeAttribute("data-mirrow-include");
             current.removeAttribute("data-mirrow-live-pick-id");
             current.removeAttribute("data-mirrow-pending");
@@ -1033,6 +1071,93 @@ export class BrowserController {
 
         window.__mirrowSelectionCleanup = () => {
           document.documentElement.style.removeProperty("cursor");
+          document.removeEventListener("mouseover", onMouseOver, true);
+          document.removeEventListener("mouseout", onMouseOut, true);
+          document.removeEventListener("click", onClick, true);
+        };
+
+        return true;
+      })();
+    `;
+
+    await this.view.webContents.executeJavaScript(script, true);
+  }
+
+  private async injectInstantTranslateMode(enabled: boolean) {
+    if (!this.view) return;
+
+    const script = `
+      (() => {
+        const styleId = "mirrow-vazirmatn-font";
+        let style = document.getElementById(styleId);
+        if (!style) {
+          style = document.createElement("style");
+          style.id = styleId;
+          document.head.appendChild(style);
+        }
+        style.textContent = [
+          "@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap');",
+          ".mirrow-persian-text{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;font-family:Vazirmatn,Vazir,Tahoma,Arial,sans-serif!important;}",
+          ".mirrow-retranslate-button{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;direction:ltr!important;text-align:center!important;}",
+          ".mirrow-dimmed{opacity:.16!important;filter:saturate(.45)!important;transition:opacity .2s ease,filter .2s ease!important;}",
+          ".mirrow-focus-target{opacity:1!important;filter:none!important;}",
+          ".mirrow-instant-hover{outline:2px solid #8b5cf6!important;outline-offset:2px!important;background:rgba(139,92,246,.12)!important;}",
+          ".mirrow-skeleton-host{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;}",
+          ".mirrow-text-skeleton{display:block!important;width:var(--mirrow-skeleton-width,120px)!important;height:1em!important;min-height:14px!important;margin-left:auto!important;margin-right:0!important;border-radius:999px!important;background:linear-gradient(90deg,rgba(148,163,184,.18),rgba(148,163,184,.42),rgba(148,163,184,.18))!important;background-size:220% 100%!important;animation:mirrowSkeletonPulse 1.1s ease-in-out infinite!important;vertical-align:-.12em!important;}",
+          "@keyframes mirrowSkeletonPulse{0%{background-position:220% 0}100%{background-position:-220% 0}}"
+        ].join("\\n");
+
+        if (window.__mirrowInstantCleanup) {
+          window.__mirrowInstantCleanup();
+          window.__mirrowInstantCleanup = null;
+        }
+
+        document.documentElement.style.removeProperty("cursor");
+        document.querySelectorAll(".mirrow-instant-hover").forEach((node) => node.classList.remove("mirrow-instant-hover"));
+
+        if (!${JSON.stringify(enabled)}) return false;
+
+        function isIgnored(el) {
+          return !el ||
+            el === document.documentElement ||
+            el === document.body ||
+            el.closest(".mirrow-retranslate-button") ||
+            ["HTML", "BODY", "SCRIPT", "STYLE", "NOSCRIPT", "IFRAME"].includes(el.tagName);
+        }
+
+        function onMouseOver(event) {
+          const el = event.target;
+          if (isIgnored(el)) return;
+          el.classList.add("mirrow-instant-hover");
+        }
+
+        function onMouseOut(event) {
+          const el = event.target;
+          if (isIgnored(el)) return;
+          el.classList.remove("mirrow-instant-hover");
+        }
+
+        function onClick(event) {
+          const el = event.target;
+          if (isIgnored(el)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+
+          const token = (window.crypto && window.crypto.randomUUID && window.crypto.randomUUID()) || String(Date.now()) + "_" + Math.random().toString(36).slice(2);
+          el.dataset.mirrowLivePickId = token;
+          el.classList.remove("mirrow-instant-hover");
+          console.log("__MIRROW_INSTANT_TRANSLATE__:" + token);
+        }
+
+        document.documentElement.style.cursor = "copy";
+        document.addEventListener("mouseover", onMouseOver, true);
+        document.addEventListener("mouseout", onMouseOut, true);
+        document.addEventListener("click", onClick, true);
+
+        window.__mirrowInstantCleanup = () => {
+          document.documentElement.style.removeProperty("cursor");
+          document.querySelectorAll(".mirrow-instant-hover").forEach((node) => node.classList.remove("mirrow-instant-hover"));
           document.removeEventListener("mouseover", onMouseOver, true);
           document.removeEventListener("mouseout", onMouseOut, true);
           document.removeEventListener("click", onClick, true);

@@ -1,4 +1,4 @@
-import { CheckSquare, Eraser, Languages, MousePointer2, Square } from "lucide-react";
+import { CheckSquare, Eraser, Languages, MousePointer2, Square, Zap } from "lucide-react";
 import { LANGUAGE_OPTIONS } from "../../shared/constants";
 import type { TranslationProgress } from "../../shared/types";
 
@@ -10,6 +10,7 @@ type TranslateControlsProps = {
   error: string | null;
   exclusionMode: boolean;
   selectionMode: boolean;
+  instantTranslateMode: boolean;
   translationScope: "full" | "pick" | "exclude";
   onSourceLanguageChange: (value: string) => void;
   onTargetLanguageChange: (value: string) => void;
@@ -18,6 +19,7 @@ type TranslateControlsProps = {
   onToggleExclusionMode: () => void;
   onClearExclusions: () => void;
   onToggleSelectionMode: () => void;
+  onToggleInstantTranslateMode: () => void;
   onClearSelections: () => void;
   onFullPageMode: () => void;
 };
@@ -30,6 +32,7 @@ export function TranslateControls({
   error,
   exclusionMode,
   selectionMode,
+  instantTranslateMode,
   translationScope,
   onSourceLanguageChange,
   onTargetLanguageChange,
@@ -38,6 +41,7 @@ export function TranslateControls({
   onToggleExclusionMode,
   onClearExclusions,
   onToggleSelectionMode,
+  onToggleInstantTranslateMode,
   onClearSelections,
   onFullPageMode,
 }: TranslateControlsProps) {
@@ -72,6 +76,15 @@ export function TranslateControls({
         >
           <CheckSquare size={16} />
           {selectionMode ? "Picking" : "Pick"}
+        </button>
+        <button
+          type="button"
+          className={instantTranslateMode ? "primary-button bg-violet hover:bg-violet/90" : "secondary-button"}
+          onClick={onToggleInstantTranslateMode}
+          title="Click a page section to translate it immediately"
+        >
+          <Zap size={16} />
+          {instantTranslateMode ? "Quicking" : "Quick"}
         </button>
         <button
           type="button"

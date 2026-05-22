@@ -6,6 +6,7 @@ import type {
   BrowserState,
   ExclusionModeState,
   HistoryItem,
+  InstantTranslateModeState,
   LmStudioModel,
   LmStudioStatus,
   OnlineCostState,
@@ -30,6 +31,7 @@ declare global {
         clearExclusions: () => Promise<number>;
         setSelectionMode: (enabled: boolean) => Promise<SelectionModeState>;
         clearSelections: () => Promise<number>;
+        setInstantTranslateMode: (enabled: boolean) => Promise<InstantTranslateModeState>;
         onState: (callback: (state: BrowserState) => void) => () => void;
       };
       translation: {
