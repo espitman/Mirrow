@@ -585,6 +585,26 @@ export class BrowserController {
 
     const script = `
       (() => {
+        const styleId = "mirrow-vazirmatn-font";
+        let style = document.getElementById(styleId);
+        if (!style) {
+          style = document.createElement("style");
+          style.id = styleId;
+          document.head.appendChild(style);
+        }
+        style.textContent = [
+          "@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap');",
+          ".mirrow-persian-text{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;font-family:Vazirmatn,Vazir,Tahoma,Arial,sans-serif!important;}",
+          ".mirrow-retranslate-button{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;direction:ltr!important;text-align:center!important;}",
+          ".mirrow-dimmed{opacity:.16!important;filter:saturate(.45)!important;transition:opacity .2s ease,filter .2s ease!important;}",
+          ".mirrow-focus-target{opacity:1!important;filter:none!important;}",
+          ".mirrow-pick-hover{outline:2px solid #38bdf8!important;outline-offset:2px!important;background:rgba(56,189,248,.10)!important;}",
+          ".mirrow-picked-preview{outline:2px solid #22c55e!important;outline-offset:2px!important;background:rgba(34,197,94,.12)!important;box-shadow:inset 0 0 0 9999px rgba(34,197,94,.04)!important;}",
+          ".mirrow-excluded-preview{opacity:.34!important;filter:saturate(.45)!important;transition:opacity .16s ease,filter .16s ease!important;}",
+          ".mirrow-text-skeleton{display:inline-block!important;width:var(--mirrow-skeleton-width,120px)!important;height:1em!important;min-height:14px!important;border-radius:999px!important;background:linear-gradient(90deg,rgba(148,163,184,.18),rgba(148,163,184,.42),rgba(148,163,184,.18))!important;background-size:220% 100%!important;animation:mirrowSkeletonPulse 1.1s ease-in-out infinite!important;vertical-align:-.12em!important;}",
+          "@keyframes mirrowSkeletonPulse{0%{background-position:220% 0}100%{background-position:-220% 0}}"
+        ].join("\\n");
+
         if (window.__mirrowSelectionCleanup) {
           window.__mirrowSelectionCleanup();
           window.__mirrowSelectionCleanup = null;
