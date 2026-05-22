@@ -15,6 +15,8 @@ export function registerIpc(browser: BrowserController) {
     "browser:reload",
     "browser:set-exclusion-mode",
     "browser:clear-exclusions",
+    "browser:set-selection-mode",
+    "browser:clear-selections",
     "online-cost:get",
     "online-cost:reset",
     "translate:start",
@@ -35,6 +37,8 @@ export function registerIpc(browser: BrowserController) {
   ipcMain.handle("browser:reload", () => browser.reload());
   ipcMain.handle("browser:set-exclusion-mode", (_event, enabled: boolean) => browser.setExclusionMode(Boolean(enabled)));
   ipcMain.handle("browser:clear-exclusions", () => browser.clearExclusions());
+  ipcMain.handle("browser:set-selection-mode", (_event, enabled: boolean) => browser.setSelectionMode(Boolean(enabled)));
+  ipcMain.handle("browser:clear-selections", () => browser.clearSelections());
   ipcMain.handle("online-cost:get", () => browser.getOnlineCost());
   ipcMain.handle("online-cost:reset", () => browser.resetOnlineCost());
 

@@ -18,6 +18,8 @@ export function BrowserShell() {
   const [targetLanguage, setTargetLanguage] = useState("Persian");
   const [isTranslating, setIsTranslating] = useState(false);
   const [exclusionMode, setExclusionMode] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedOnly, setSelectedOnly] = useState(false);
   const [progress, setProgress] = useState<TranslationProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +44,7 @@ export function BrowserShell() {
       resizeObserver.disconnect();
       window.removeEventListener("resize", syncBounds);
       window.mirrow.browser.setExclusionMode(false).catch(() => undefined);
+      window.mirrow.browser.setSelectionMode(false).catch(() => undefined);
       window.mirrow.browser.setBounds({ x: 0, y: 0, width: 0, height: 0 }).catch(() => undefined);
     };
   }, [syncBounds]);
@@ -75,8 +78,11 @@ export function BrowserShell() {
     if (exclusionMode) {
       window.mirrow.browser.setExclusionMode(false).then(() => setExclusionMode(false)).catch(() => undefined);
     }
+    if (selectionMode) {
+      window.mirrow.browser.setSelectionMode(false).then(() => setSelectionMode(false)).catch(() => undefined);
+    }
     window.mirrow.translation
-      .start({ sourceLanguage, targetLanguage })
+      .start({ sourceLanguage, targetLanguage, selectedOnly })
       .catch((nextError: Error) => setError(nextError.message))
       .finally(() => setIsTranslating(false));
   };
@@ -98,6 +104,8 @@ export function BrowserShell() {
         progress={progress}
         error={error}
         exclusionMode={exclusionMode}
+        selectionMode={selectionMode}
+        selectedOnly={selectedOnly}
         onSourceLanguageChange={setSourceLanguage}
         onTargetLanguageChange={setTargetLanguage}
         onTranslate={translate}
@@ -105,7 +113,10 @@ export function BrowserShell() {
           const next = !exclusionMode;
           window.mirrow.browser
             .setExclusionMode(next)
-            .then((state) => setExclusionMode(state.enabled))
+            .then((state) => {
+              setExclusionMode(state.enabled);
+              if (state.enabled) setSelectionMode(false);
+            })
             .catch((nextError: Error) => setError(nextError.message));
         }}
         onClearExclusions={() => {
@@ -114,6 +125,23 @@ export function BrowserShell() {
             .then((count) => setError(count ? `Cleared ${count} excluded elements.` : null))
             .catch((nextError: Error) => setError(nextError.message));
         }}
+        onToggleSelectionMode={() => {
+          const next = !selectionMode;
+          window.mirrow.browser
+            .setSelectionMode(next)
+            .then((state) => {
+              setSelectionMode(state.enabled);
+              if (state.enabled) setExclusionMode(false);
+            })
+            .catch((nextError: Error) => setError(nextError.message));
+        }}
+        onClearSelections={() => {
+          window.mirrow.browser
+            .clearSelections()
+            .then((count) => setError(count ? `Cleared ${count} picked elements.` : null))
+            .catch((nextError: Error) => setError(nextError.message));
+        }}
+        onSelectedOnlyChange={setSelectedOnly}
       />
       <div className="relative min-h-0 flex-1 bg-[#f8fafc]" ref={viewportRef}>
         {!browserState.url && (

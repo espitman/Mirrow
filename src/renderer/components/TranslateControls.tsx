@@ -1,4 +1,4 @@
-import { Eraser, Languages, MousePointer2 } from "lucide-react";
+import { CheckSquare, Eraser, Languages, MousePointer2 } from "lucide-react";
 import { LANGUAGE_OPTIONS } from "../../shared/constants";
 import type { TranslationProgress } from "../../shared/types";
 
@@ -9,11 +9,16 @@ type TranslateControlsProps = {
   progress: TranslationProgress | null;
   error: string | null;
   exclusionMode: boolean;
+  selectionMode: boolean;
+  selectedOnly: boolean;
   onSourceLanguageChange: (value: string) => void;
   onTargetLanguageChange: (value: string) => void;
   onTranslate: () => void;
   onToggleExclusionMode: () => void;
   onClearExclusions: () => void;
+  onToggleSelectionMode: () => void;
+  onClearSelections: () => void;
+  onSelectedOnlyChange: (value: boolean) => void;
 };
 
 export function TranslateControls({
@@ -23,11 +28,16 @@ export function TranslateControls({
   progress,
   error,
   exclusionMode,
+  selectionMode,
+  selectedOnly,
   onSourceLanguageChange,
   onTargetLanguageChange,
   onTranslate,
   onToggleExclusionMode,
   onClearExclusions,
+  onToggleSelectionMode,
+  onClearSelections,
+  onSelectedOnlyChange,
 }: TranslateControlsProps) {
   const percent = progress ? Math.round((progress.completed / Math.max(progress.total, 1)) * 100) : 0;
 
@@ -40,6 +50,23 @@ export function TranslateControls({
         </button>
         <button
           type="button"
+          className={selectionMode ? "primary-button bg-emerald-500 hover:bg-emerald-500/90" : "secondary-button"}
+          onClick={onToggleSelectionMode}
+          title="Click page elements to include them in selected-only translation"
+        >
+          <CheckSquare size={16} />
+          {selectionMode ? "Picking" : "Pick"}
+        </button>
+        <label className="flex h-10 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-xs text-slate-200">
+          <input
+            type="checkbox"
+            checked={selectedOnly}
+            onChange={(event) => onSelectedOnlyChange(event.target.checked)}
+          />
+          Only selected
+        </label>
+        <button
+          type="button"
           className={exclusionMode ? "primary-button bg-rose-500 hover:bg-rose-500/90" : "secondary-button"}
           onClick={onToggleExclusionMode}
           title="Click page elements to exclude them from translation"
@@ -49,6 +76,9 @@ export function TranslateControls({
         </button>
         <button type="button" className="icon-button" onClick={onClearExclusions} title="Clear excluded elements">
           <Eraser size={16} />
+        </button>
+        <button type="button" className="icon-button" onClick={onClearSelections} title="Clear picked elements">
+          <CheckSquare size={16} />
         </button>
         <select className="field max-w-[170px]" value={sourceLanguage} onChange={(event) => onSourceLanguageChange(event.target.value)}>
           {LANGUAGE_OPTIONS.map((language) => (

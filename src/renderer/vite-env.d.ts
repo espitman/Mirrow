@@ -8,6 +8,7 @@ import type {
   HistoryItem,
   LmStudioStatus,
   OnlineCostState,
+  SelectionModeState,
   TranslationBatch,
   TranslationComplete,
   TranslationProgress,
@@ -26,6 +27,8 @@ declare global {
         reload: () => Promise<BrowserState>;
         setExclusionMode: (enabled: boolean) => Promise<ExclusionModeState>;
         clearExclusions: () => Promise<number>;
+        setSelectionMode: (enabled: boolean) => Promise<SelectionModeState>;
+        clearSelections: () => Promise<number>;
         onState: (callback: (state: BrowserState) => void) => () => void;
       };
       translation: {

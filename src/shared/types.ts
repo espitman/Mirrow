@@ -44,6 +44,7 @@ export type HistoryItem = {
 export type TranslatePageOptions = {
   sourceLanguage?: string;
   targetLanguage: string;
+  selectedOnly?: boolean;
 };
 
 export type LmStudioStatus = {
@@ -80,6 +81,10 @@ export type TranslationComplete = {
 };
 
 export type ExclusionModeState = {
+  enabled: boolean;
+};
+
+export type SelectionModeState = {
   enabled: boolean;
 };
 

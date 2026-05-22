@@ -5,6 +5,7 @@ import type {
   BrowserState,
   HistoryItem,
   OnlineCostState,
+  SelectionModeState,
   TranslationBatch,
   TranslationComplete,
   TranslationProgress,
@@ -28,6 +29,8 @@ contextBridge.exposeInMainWorld("mirrow", {
     reload: () => ipcRenderer.invoke("browser:reload") as Promise<BrowserState>,
     setExclusionMode: (enabled: boolean) => ipcRenderer.invoke("browser:set-exclusion-mode", enabled) as Promise<ExclusionModeState>,
     clearExclusions: () => ipcRenderer.invoke("browser:clear-exclusions") as Promise<number>,
+    setSelectionMode: (enabled: boolean) => ipcRenderer.invoke("browser:set-selection-mode", enabled) as Promise<SelectionModeState>,
+    clearSelections: () => ipcRenderer.invoke("browser:clear-selections") as Promise<number>,
     onState: (callback: (state: BrowserState) => void) => on("browser:state", callback),
   },
   translation: {

@@ -3,6 +3,7 @@ import type {
   BrowserBounds,
   BrowserState,
   ExclusionModeState,
+  SelectionModeState,
   TranslationComplete,
   TranslationItem,
   TranslationProgress,
@@ -18,6 +19,7 @@ export class BrowserController {
   private view: BrowserView | null = null;
   private bounds: BrowserBounds | null = null;
   private exclusionModeEnabled = false;
+  private selectionModeEnabled = false;
   private onlineCostToman = 0;
 
   constructor(private readonly window: BrowserWindow) {}
@@ -97,7 +99,21 @@ export class BrowserController {
 
   async setExclusionMode(enabled: boolean): Promise<ExclusionModeState> {
     this.exclusionModeEnabled = enabled;
+    if (enabled && this.selectionModeEnabled) {
+      this.selectionModeEnabled = false;
+      await this.injectSelectionMode(false);
+    }
     await this.injectExclusionMode(enabled);
+    return { enabled };
+  }
+
+  async setSelectionMode(enabled: boolean): Promise<SelectionModeState> {
+    this.selectionModeEnabled = enabled;
+    if (enabled && this.exclusionModeEnabled) {
+      this.exclusionModeEnabled = false;
+      await this.injectExclusionMode(false);
+    }
+    await this.injectSelectionMode(enabled);
     return { enabled };
   }
 
@@ -116,6 +132,22 @@ export class BrowserController {
           } else {
             node.style.removeProperty("opacity");
           }
+        }
+        return nodes.length;
+      })();
+    `;
+    return (await this.view?.webContents.executeJavaScript(script, true)) ?? 0;
+  }
+
+  async clearSelections() {
+    const script = `
+      (() => {
+        const nodes = document.querySelectorAll("[data-mirrow-include='true']");
+        for (const node of nodes) {
+          node.removeAttribute("data-mirrow-include");
+          node.style.removeProperty("outline");
+          node.style.removeProperty("outline-offset");
+          node.style.removeProperty("box-shadow");
         }
         return nodes.length;
       })();
@@ -150,7 +182,7 @@ export class BrowserController {
       throw new Error("Load a website before translating.");
     }
 
-    const items = await this.collectVisibleTextNodes();
+    const items = await this.collectVisibleTextNodes(Boolean(options.selectedOnly));
     if (!items.length) {
       throw new Error("No visible text was found on this page.");
     }
@@ -215,9 +247,10 @@ export class BrowserController {
     return complete;
   }
 
-  private async collectVisibleTextNodes(): Promise<TranslationItem[]> {
+  private async collectVisibleTextNodes(selectedOnly: boolean): Promise<TranslationItem[]> {
     const script = `
       (() => {
+        const selectedOnly = ${JSON.stringify(selectedOnly)};
         function isVisibleElement(el) {
           const style = window.getComputedStyle(el);
           const rect = el.getBoundingClientRect();
@@ -261,6 +294,8 @@ export class BrowserController {
 
         while (walker.nextNode()) {
           const node = walker.currentNode;
+          const parent = node.parentElement;
+          if (selectedOnly && (!parent || !parent.closest("[data-mirrow-include='true']"))) continue;
           const text = node.textContent ? node.textContent.trim() : "";
           if (!text) continue;
           const id = "t_" + counter++;
@@ -280,6 +315,13 @@ export class BrowserController {
     const script = `
       (() => {
         const translations = ${JSON.stringify(items)};
+        const styleId = "mirrow-vazirmatn-font";
+        if (!document.getElementById(styleId)) {
+          const style = document.createElement("style");
+          style.id = styleId;
+          style.textContent = "@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap');";
+          document.head.appendChild(style);
+        }
         const nodeMap = window.__mirrowNodeMap;
         if (!nodeMap) return 0;
         let count = 0;
@@ -289,8 +331,10 @@ export class BrowserController {
             node.textContent = item.translation;
             if (/[\u0600-\u06FF]/.test(item.translation) && node.parentElement) {
               node.parentElement.setAttribute("dir", "rtl");
-              node.parentElement.style.textAlign = "right";
-              node.parentElement.style.unicodeBidi = "plaintext";
+              node.parentElement.style.setProperty("direction", "rtl", "important");
+              node.parentElement.style.setProperty("text-align", "right", "important");
+              node.parentElement.style.setProperty("unicode-bidi", "plaintext", "important");
+              node.parentElement.style.setProperty("font-family", "Vazirmatn, Vazir, Tahoma, Arial, sans-serif", "important");
             }
             count += 1;
           }
@@ -392,6 +436,79 @@ export class BrowserController {
         document.addEventListener("click", onClick, true);
 
         window.__mirrowExclusionCleanup = () => {
+          document.documentElement.style.removeProperty("cursor");
+          document.removeEventListener("mouseover", onMouseOver, true);
+          document.removeEventListener("mouseout", onMouseOut, true);
+          document.removeEventListener("click", onClick, true);
+        };
+
+        return true;
+      })();
+    `;
+
+    await this.view.webContents.executeJavaScript(script, true);
+  }
+
+  private async injectSelectionMode(enabled: boolean) {
+    if (!this.view) return;
+
+    const script = `
+      (() => {
+        if (window.__mirrowSelectionCleanup) {
+          window.__mirrowSelectionCleanup();
+          window.__mirrowSelectionCleanup = null;
+        }
+
+        document.documentElement.style.removeProperty("cursor");
+
+        if (!${JSON.stringify(enabled)}) return false;
+
+        function isIgnored(el) {
+          return !el ||
+            el === document.documentElement ||
+            el === document.body ||
+            ["HTML", "BODY", "SCRIPT", "STYLE", "NOSCRIPT", "IFRAME"].includes(el.tagName);
+        }
+
+        function onMouseOver(event) {
+          const el = event.target;
+          if (isIgnored(el) || el.dataset.mirrowInclude === "true") return;
+          el.style.outline = "2px solid #38bdf8";
+          el.style.outlineOffset = "2px";
+        }
+
+        function onMouseOut(event) {
+          const el = event.target;
+          if (isIgnored(el) || el.dataset.mirrowInclude === "true") return;
+          el.style.removeProperty("outline");
+          el.style.removeProperty("outline-offset");
+        }
+
+        function onClick(event) {
+          const el = event.target;
+          if (isIgnored(el)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+
+          if (el.dataset.mirrowInclude === "true") {
+            el.removeAttribute("data-mirrow-include");
+            el.style.outline = "2px solid #38bdf8";
+            el.style.removeProperty("box-shadow");
+          } else {
+            el.dataset.mirrowInclude = "true";
+            el.style.outline = "2px solid #22c55e";
+            el.style.boxShadow = "0 0 0 9999px rgba(34, 197, 94, 0.04) inset";
+          }
+          el.style.outlineOffset = "2px";
+        }
+
+        document.documentElement.style.cursor = "copy";
+        document.addEventListener("mouseover", onMouseOver, true);
+        document.addEventListener("mouseout", onMouseOut, true);
+        document.addEventListener("click", onClick, true);
+
+        window.__mirrowSelectionCleanup = () => {
           document.documentElement.style.removeProperty("cursor");
           document.removeEventListener("mouseover", onMouseOver, true);
           document.removeEventListener("mouseout", onMouseOut, true);
