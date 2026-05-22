@@ -52,6 +52,11 @@ export type LmStudioStatus = {
   message: string;
 };
 
+export type LmStudioModel = {
+  id: string;
+  name: string;
+};
+
 export type BrowserBounds = {
   x: number;
   y: number;

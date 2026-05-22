@@ -4,6 +4,7 @@ import type {
   BrowserBounds,
   BrowserState,
   HistoryItem,
+  LmStudioModel,
   OnlineCostState,
   SelectionModeState,
   TranslationBatch,
@@ -52,6 +53,7 @@ contextBridge.exposeInMainWorld("mirrow", {
   },
   lmStudio: {
     checkConnection: () => ipcRenderer.invoke("lmstudio:check-connection"),
+    listModels: () => ipcRenderer.invoke("lmstudio:list-models") as Promise<LmStudioModel[]>,
   },
   onlineCost: {
     get: () => ipcRenderer.invoke("online-cost:get") as Promise<OnlineCostState>,

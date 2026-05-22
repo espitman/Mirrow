@@ -78,7 +78,7 @@ export function BrowserShell() {
     if (exclusionMode) {
       window.mirrow.browser.setExclusionMode(false).then(() => setExclusionMode(false)).catch(() => undefined);
     }
-    if (selectionMode) {
+    if (selectionMode && translationScope !== "pick") {
       window.mirrow.browser.setSelectionMode(false).then(() => setSelectionMode(false)).catch(() => undefined);
     }
     window.mirrow.translation

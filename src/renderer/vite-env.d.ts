@@ -6,6 +6,7 @@ import type {
   BrowserState,
   ExclusionModeState,
   HistoryItem,
+  LmStudioModel,
   LmStudioStatus,
   OnlineCostState,
   SelectionModeState,
@@ -50,6 +51,7 @@ declare global {
       };
       lmStudio: {
         checkConnection: () => Promise<LmStudioStatus>;
+        listModels: () => Promise<LmStudioModel[]>;
       };
       onlineCost: {
         get: () => Promise<OnlineCostState>;

@@ -1,12 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
-import { PlugZap, Save } from "lucide-react";
-import { useLmStudioStatusQuery, useSettingsQuery, useUpdateSettingsMutation } from "../lib/hooks";
+import { PlugZap, RefreshCw, Save } from "lucide-react";
+import { useLmStudioModelsQuery, useLmStudioStatusQuery, useSettingsQuery, useUpdateSettingsMutation } from "../lib/hooks";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function SettingsPage() {
   const settings = useSettingsQuery();
   const updateSettings = useUpdateSettingsMutation();
   const status = useLmStudioStatusQuery();
+  const localModels = useLmStudioModelsQuery();
   const [form, setForm] = useState({
     translationEngine: "online" as "local" | "online",
     lmStudioBaseUrl: "",
@@ -22,6 +23,10 @@ export function SettingsPage() {
   useEffect(() => {
     if (settings.data) setForm(settings.data);
   }, [settings.data]);
+
+  useEffect(() => {
+    if (form.lmStudioBaseUrl) localModels.refetch();
+  }, [form.lmStudioBaseUrl]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -96,7 +101,13 @@ export function SettingsPage() {
           </div>
 
           <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-            <div className="mb-4 text-sm font-medium text-white">Local provider</div>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="text-sm font-medium text-white">Local provider</div>
+              <button type="button" className="secondary-button" onClick={() => localModels.refetch()} disabled={localModels.isFetching}>
+                <RefreshCw size={16} className={localModels.isFetching ? "animate-spin" : ""} />
+                Models
+              </button>
+            </div>
             <div className="grid gap-4">
           <label className="block">
             <span className="mb-2 block text-sm text-slate-300">LM Studio base URL</span>
@@ -107,8 +118,24 @@ export function SettingsPage() {
             />
           </label>
           <label className="block">
-            <span className="mb-2 block text-sm text-slate-300">Model name</span>
-            <input className="field" value={form.modelName} onChange={(event) => setForm((current) => ({ ...current, modelName: event.target.value }))} />
+            <span className="mb-2 block text-sm text-slate-300">Local model</span>
+            <select
+              className="field"
+              value={form.modelName}
+              onChange={(event) => setForm((current) => ({ ...current, modelName: event.target.value }))}
+              disabled={localModels.isLoading}
+            >
+              {form.modelName && !localModels.data?.some((model) => model.id === form.modelName) && (
+                <option value={form.modelName}>{form.modelName}</option>
+              )}
+              {(localModels.data ?? []).map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name}
+                </option>
+              ))}
+              {!form.modelName && !(localModels.data ?? []).length && <option value="">No local models found</option>}
+            </select>
+            {localModels.isError && <div className="mt-2 text-xs text-rose-300">Could not load local models. Check LM Studio server.</div>}
           </label>
             </div>
           </div>

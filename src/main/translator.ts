@@ -1,5 +1,5 @@
 import { TRANSLATION_SYSTEM_PROMPT } from "../shared/constants.js";
-import type { AppSettings, LmStudioStatus, TranslationBatch, TranslationBatchResult } from "../shared/types.js";
+import type { AppSettings, LmStudioModel, LmStudioStatus, TranslationBatch, TranslationBatchResult } from "../shared/types.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -36,6 +36,23 @@ export async function checkLmStudioConnection(settings: AppSettings): Promise<Lm
       message: "LM Studio is offline. Please start LM Studio and load the translategemma-4b-it model.",
     };
   }
+}
+
+export async function listLmStudioModels(settings: AppSettings): Promise<LmStudioModel[]> {
+  const response = await fetch(resolveModelsUrl(settings.lmStudioBaseUrl), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error(`LM Studio returned ${response.status}`);
+  }
+
+  const data = (await response.json()) as { data?: Array<{ id?: string; object?: string }> };
+  return (data.data ?? [])
+    .map((model) => String(model.id || "").trim())
+    .filter(Boolean)
+    .map((id) => ({ id, name: id }));
 }
 
 export async function translateBatch(
@@ -349,6 +366,16 @@ function resolveChatCompletionsUrl(settings: AppSettings) {
   }
 
   return settings.lmStudioBaseUrl;
+}
+
+function resolveModelsUrl(baseUrl: string) {
+  const normalized = (baseUrl || "").trim().replace(/\/+$/, "");
+  if (normalized.endsWith("/models")) return normalized;
+  if (normalized.endsWith("/chat/completions")) {
+    return `${normalized.slice(0, -"/chat/completions".length)}/models`;
+  }
+  if (normalized.endsWith("/v1")) return `${normalized}/models`;
+  return `${normalized}/v1/models`;
 }
 
 function resolveEndpoint(baseUrl: string, path: string) {
