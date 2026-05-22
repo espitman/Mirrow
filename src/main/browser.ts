@@ -136,6 +136,7 @@ export class BrowserController {
         for (const node of nodes) {
           node.removeAttribute("data-mirrow-skip");
           node.classList.remove("mirrow-dimmed");
+          node.classList.remove("mirrow-excluded-preview");
           node.style.removeProperty("outline");
           node.style.removeProperty("outline-offset");
           node.style.removeProperty("cursor");
@@ -159,6 +160,7 @@ export class BrowserController {
         for (const node of nodes) {
           node.removeAttribute("data-mirrow-include");
           node.classList.remove("mirrow-focus-target");
+          node.classList.remove("mirrow-picked-preview");
           node.style.removeProperty("outline");
           node.style.removeProperty("outline-offset");
           node.style.removeProperty("box-shadow");
@@ -386,6 +388,8 @@ export class BrowserController {
             ".mirrow-retranslate-button{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;direction:ltr!important;text-align:center!important;}",
             ".mirrow-dimmed{opacity:.16!important;filter:saturate(.45)!important;transition:opacity .2s ease,filter .2s ease!important;}",
             ".mirrow-focus-target{opacity:1!important;filter:none!important;}",
+            ".mirrow-picked-preview{background:rgba(34,197,94,.12)!important;box-shadow:inset 0 0 0 9999px rgba(34,197,94,.04)!important;transition:background .16s ease,box-shadow .16s ease!important;}",
+            ".mirrow-excluded-preview{opacity:.34!important;filter:saturate(.45)!important;transition:opacity .16s ease,filter .16s ease!important;}",
             ".mirrow-text-skeleton{display:inline-block!important;width:var(--mirrow-skeleton-width,120px)!important;height:1em!important;min-height:14px!important;border-radius:999px!important;background:linear-gradient(90deg,rgba(148,163,184,.18),rgba(148,163,184,.42),rgba(148,163,184,.18))!important;background-size:220% 100%!important;animation:mirrowSkeletonPulse 1.1s ease-in-out infinite!important;vertical-align:-.12em!important;}",
             "@keyframes mirrowSkeletonPulse{0%{background-position:220% 0}100%{background-position:-220% 0}}"
           ].join("\\n");
@@ -534,6 +538,7 @@ export class BrowserController {
           if (el.dataset.mirrowSkip === "true") {
             el.removeAttribute("data-mirrow-skip");
             el.classList.remove("mirrow-dimmed");
+            el.classList.remove("mirrow-excluded-preview");
             el.style.removeProperty("outline");
             el.style.removeProperty("outline-offset");
             if (el.dataset.mirrowPreviousOpacity !== undefined) {
@@ -544,6 +549,7 @@ export class BrowserController {
             }
           } else {
             el.dataset.mirrowSkip = "true";
+            el.classList.add("mirrow-excluded-preview");
             if (el.dataset.mirrowPreviousOpacity === undefined) {
               el.dataset.mirrowPreviousOpacity = el.style.opacity || "";
             }
@@ -613,9 +619,11 @@ export class BrowserController {
           if (el.dataset.mirrowInclude === "true") {
             el.removeAttribute("data-mirrow-include");
             el.classList.remove("mirrow-focus-target");
+            el.classList.remove("mirrow-picked-preview");
           } else {
             el.dataset.mirrowInclude = "true";
             el.classList.add("mirrow-focus-target");
+            el.classList.add("mirrow-picked-preview");
           }
         }
 
@@ -652,7 +660,9 @@ export class BrowserController {
             ".mirrow-persian-text{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;font-family:Vazirmatn,Vazir,Tahoma,Arial,sans-serif!important;}",
             ".mirrow-retranslate-button{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;direction:ltr!important;text-align:center!important;}",
             ".mirrow-dimmed{opacity:.16!important;filter:saturate(.45)!important;transition:opacity .2s ease,filter .2s ease!important;}",
-            ".mirrow-focus-target{opacity:1!important;filter:none!important;}"
+            ".mirrow-focus-target{opacity:1!important;filter:none!important;}",
+            ".mirrow-picked-preview{background:rgba(34,197,94,.12)!important;box-shadow:inset 0 0 0 9999px rgba(34,197,94,.04)!important;transition:background .16s ease,box-shadow .16s ease!important;}",
+            ".mirrow-excluded-preview{opacity:.34!important;filter:saturate(.45)!important;transition:opacity .16s ease,filter .16s ease!important;}"
           ].join("\\n");
           document.head.appendChild(style);
         }
