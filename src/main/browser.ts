@@ -24,6 +24,7 @@ export class BrowserController {
   private exclusionModeEnabled = false;
   private selectionModeEnabled = false;
   private instantTranslateModeEnabled = false;
+  private isPageLoading = false;
   private onlineCostToman = 0;
   private translationCancelled = false;
   private translationInProgress = false;
@@ -52,13 +53,30 @@ export class BrowserController {
       return { action: "deny" };
     });
 
-    this.view.webContents.on("did-start-loading", () => this.emitState());
-    this.view.webContents.on("did-stop-loading", () => this.emitState());
-    this.view.webContents.on("did-navigate", () => this.emitState());
+    this.view.webContents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
+      if (!isMainFrame || isInPlace) return;
+      this.isPageLoading = true;
+      this.emitState();
+    });
+    this.view.webContents.on("did-stop-loading", () => {
+      this.isPageLoading = false;
+      this.emitState();
+    });
+    this.view.webContents.on("did-finish-load", () => {
+      this.isPageLoading = false;
+      this.emitState();
+    });
+    this.view.webContents.on("did-navigate", () => {
+      this.isPageLoading = false;
+      this.emitState();
+    });
     this.view.webContents.on("did-navigate-in-page", () => this.emitState());
     this.view.webContents.on("page-title-updated", () => this.emitState());
     this.view.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
-      if (code !== -3 && isMainFrame) this.sendError(`Website failed to load: ${description || url}`);
+      if (!isMainFrame) return;
+      this.isPageLoading = false;
+      this.emitState();
+      if (code !== -3) this.sendError(`Website failed to load: ${description || url}`);
     });
     this.view.webContents.on("console-message", (_event, _level, message) => {
       if (message.startsWith("__MIRROW_RETRANSLATE__:")) {
@@ -108,9 +126,15 @@ export class BrowserController {
   async loadUrl(rawUrl: string) {
     const view = this.create();
     const url = normalizeUrl(rawUrl);
-    await view.webContents.loadURL(url);
+    this.isPageLoading = true;
     this.emitState();
-    return this.getState();
+    try {
+      await view.webContents.loadURL(url);
+      return this.getState();
+    } finally {
+      this.isPageLoading = false;
+      this.emitState();
+    }
   }
 
   async goBack() {
@@ -124,7 +148,10 @@ export class BrowserController {
   }
 
   async reload() {
-    this.view?.webContents.reload();
+    if (!this.view) return this.getState();
+    this.isPageLoading = true;
+    this.emitState();
+    this.view.webContents.reload();
     return this.getState();
   }
 
@@ -261,7 +288,7 @@ export class BrowserController {
       title: contents?.getTitle() ?? "",
       canGoBack: contents?.navigationHistory.canGoBack() ?? false,
       canGoForward: contents?.navigationHistory.canGoForward() ?? false,
-      isLoading: contents?.isLoading() ?? false,
+      isLoading: this.isPageLoading,
     };
   }
 
@@ -1143,11 +1170,127 @@ export class BrowserController {
         if (!${JSON.stringify(enabled)}) return false;
 
         function isIgnored(el) {
-          return !el ||
+          if (!el ||
             el === document.documentElement ||
             el === document.body ||
             el.closest(".mirrow-retranslate-button") ||
-            ["HTML", "BODY", "SCRIPT", "STYLE", "NOSCRIPT", "IFRAME"].includes(el.tagName);
+            el.closest(".mirrow-text-skeleton") ||
+            ["HTML", "BODY", "SCRIPT", "STYLE", "NOSCRIPT", "IFRAME"].includes(el.tagName)) {
+            return true;
+          }
+          const block = nearestTextBlock(el);
+          return !block || block.closest("[data-mirrow-translated='true']") || block.closest("[data-mirrow-pending='true']");
+        }
+
+        function isVisibleElement(el) {
+          const style = window.getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          return style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            style.opacity !== "0" &&
+            rect.width > 0 &&
+            rect.height > 0;
+        }
+
+        function shouldSkipElement(el) {
+          const tag = el.tagName.toLowerCase();
+          if (el.closest(".mirrow-retranslate-button")) return true;
+          if (el.closest(".mirrow-text-skeleton")) return true;
+          return [
+            "script", "style", "noscript", "svg", "canvas", "input",
+            "textarea", "code", "pre", "iframe", "select", "option", "button"
+          ].includes(tag);
+        }
+
+        function nearestTextBlock(el) {
+          let current = el;
+          while (current && current !== document.body) {
+            const style = window.getComputedStyle(current);
+            const tag = current.tagName.toLowerCase();
+            if (
+              ["p", "li", "article", "section", "header", "footer", "main", "aside", "nav", "blockquote", "figcaption", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tag) ||
+              ["block", "list-item", "table-cell", "flex", "grid"].includes(style.display)
+            ) {
+              return current;
+            }
+            current = current.parentElement;
+          }
+          return el;
+        }
+
+        function forceSkeletonHost(el) {
+          if (!el) return;
+          el.classList.add("mirrow-skeleton-host");
+          el.setAttribute("dir", "rtl");
+          el.style.setProperty("direction", "rtl", "important");
+          el.style.setProperty("text-align", "right", "important");
+          el.style.setProperty("unicode-bidi", "plaintext", "important");
+        }
+
+        function collectAndSkeleton(root, token) {
+          if (!root || root.dataset.mirrowTranslated === "true" || root.dataset.mirrowPending === "true") return [];
+          root.dataset.mirrowPending = "true";
+          root.dataset.mirrowLivePickId = token;
+
+          const items = [];
+          const nodeMap = window.__mirrowNodeMap instanceof Map ? window.__mirrowNodeMap : new Map();
+          const sourceTextMap = window.__mirrowSourceTextMap instanceof Map ? window.__mirrowSourceTextMap : new Map();
+          const handledBlocks = new Set();
+          let counter = nodeMap.size;
+          const walker = document.createTreeWalker(
+            root,
+            NodeFilter.SHOW_TEXT,
+            {
+              acceptNode(node) {
+                const text = node.textContent ? node.textContent.trim() : "";
+                if (!text) return NodeFilter.FILTER_REJECT;
+                if (text.length <= 1 && !/[A-Za-z0-9\\u0600-\\u06FF]/.test(text)) return NodeFilter.FILTER_REJECT;
+                const parent = node.parentElement;
+                if (!parent) return NodeFilter.FILTER_REJECT;
+                if (parent.closest("[data-mirrow-skip='true']")) return NodeFilter.FILTER_REJECT;
+                if (parent.closest("[data-mirrow-translated='true']")) return NodeFilter.FILTER_REJECT;
+                if (shouldSkipElement(parent)) return NodeFilter.FILTER_REJECT;
+                if (!isVisibleElement(parent)) return NodeFilter.FILTER_REJECT;
+                return NodeFilter.FILTER_ACCEPT;
+              }
+            }
+          );
+
+          while (walker.nextNode()) {
+            const node = walker.currentNode;
+            const parent = node.parentElement;
+            if (!parent) continue;
+            const block = nearestTextBlock(parent);
+            if (!block || handledBlocks.has(block)) continue;
+            const text = block.textContent ? block.textContent.trim().replace(/\\s+/g, " ") : "";
+            if (!text) continue;
+            const id = "t_" + counter++;
+            handledBlocks.add(block);
+            nodeMap.set(id, block);
+            sourceTextMap.set(id, text);
+            block.__mirrowOriginalText = text;
+            items.push({ id, text });
+
+            forceSkeletonHost(block);
+            if (!document.querySelector('[data-mirrow-skeleton-for="' + CSS.escape(id) + '"]')) {
+              const skeleton = document.createElement("span");
+              skeleton.dataset.mirrowSkeletonFor = id;
+              skeleton.className = "mirrow-text-skeleton";
+              skeleton.setAttribute("dir", "rtl");
+              skeleton.textContent = " ";
+              const width = Math.max(36, Math.min(420, text.length * 7));
+              skeleton.style.setProperty("--mirrow-skeleton-width", width + "px");
+              block.textContent = "";
+              block.appendChild(skeleton);
+            }
+          }
+
+          window.__mirrowNodeMap = nodeMap;
+          window.__mirrowSourceTextMap = sourceTextMap;
+          window.__mirrowInstantItemsByToken = window.__mirrowInstantItemsByToken instanceof Map ? window.__mirrowInstantItemsByToken : new Map();
+          window.__mirrowInstantItemsByToken.set(token, items);
+          if (!items.length) root.removeAttribute("data-mirrow-pending");
+          return items;
         }
 
         function onMouseOver(event) {
@@ -1241,11 +1384,127 @@ export class BrowserController {
         if (!${JSON.stringify(enabled)}) return false;
 
         function isIgnored(el) {
-          return !el ||
+          if (!el ||
             el === document.documentElement ||
             el === document.body ||
             el.closest(".mirrow-retranslate-button") ||
-            ["HTML", "BODY", "SCRIPT", "STYLE", "NOSCRIPT", "IFRAME"].includes(el.tagName);
+            el.closest(".mirrow-text-skeleton") ||
+            ["HTML", "BODY", "SCRIPT", "STYLE", "NOSCRIPT", "IFRAME"].includes(el.tagName)) {
+            return true;
+          }
+          const block = nearestTextBlock(el);
+          return !block || block.closest("[data-mirrow-translated='true']") || block.closest("[data-mirrow-pending='true']");
+        }
+
+        function isVisibleElement(el) {
+          const style = window.getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          return style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            style.opacity !== "0" &&
+            rect.width > 0 &&
+            rect.height > 0;
+        }
+
+        function shouldSkipElement(el) {
+          const tag = el.tagName.toLowerCase();
+          if (el.closest(".mirrow-retranslate-button")) return true;
+          if (el.closest(".mirrow-text-skeleton")) return true;
+          return [
+            "script", "style", "noscript", "svg", "canvas", "input",
+            "textarea", "code", "pre", "iframe", "select", "option", "button"
+          ].includes(tag);
+        }
+
+        function nearestTextBlock(el) {
+          let current = el;
+          while (current && current !== document.body) {
+            const style = window.getComputedStyle(current);
+            const tag = current.tagName.toLowerCase();
+            if (
+              ["p", "li", "article", "section", "header", "footer", "main", "aside", "nav", "blockquote", "figcaption", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tag) ||
+              ["block", "list-item", "table-cell", "flex", "grid"].includes(style.display)
+            ) {
+              return current;
+            }
+            current = current.parentElement;
+          }
+          return el;
+        }
+
+        function forceSkeletonHost(el) {
+          if (!el) return;
+          el.classList.add("mirrow-skeleton-host");
+          el.setAttribute("dir", "rtl");
+          el.style.setProperty("direction", "rtl", "important");
+          el.style.setProperty("text-align", "right", "important");
+          el.style.setProperty("unicode-bidi", "plaintext", "important");
+        }
+
+        function collectAndSkeleton(root, token) {
+          if (!root || root.dataset.mirrowTranslated === "true" || root.dataset.mirrowPending === "true") return [];
+          root.dataset.mirrowPending = "true";
+          root.dataset.mirrowLivePickId = token;
+
+          const items = [];
+          const nodeMap = window.__mirrowNodeMap instanceof Map ? window.__mirrowNodeMap : new Map();
+          const sourceTextMap = window.__mirrowSourceTextMap instanceof Map ? window.__mirrowSourceTextMap : new Map();
+          const handledBlocks = new Set();
+          let counter = nodeMap.size;
+          const walker = document.createTreeWalker(
+            root,
+            NodeFilter.SHOW_TEXT,
+            {
+              acceptNode(node) {
+                const text = node.textContent ? node.textContent.trim() : "";
+                if (!text) return NodeFilter.FILTER_REJECT;
+                if (text.length <= 1 && !/[A-Za-z0-9\\u0600-\\u06FF]/.test(text)) return NodeFilter.FILTER_REJECT;
+                const parent = node.parentElement;
+                if (!parent) return NodeFilter.FILTER_REJECT;
+                if (parent.closest("[data-mirrow-skip='true']")) return NodeFilter.FILTER_REJECT;
+                if (parent.closest("[data-mirrow-translated='true']")) return NodeFilter.FILTER_REJECT;
+                if (shouldSkipElement(parent)) return NodeFilter.FILTER_REJECT;
+                if (!isVisibleElement(parent)) return NodeFilter.FILTER_REJECT;
+                return NodeFilter.FILTER_ACCEPT;
+              }
+            }
+          );
+
+          while (walker.nextNode()) {
+            const node = walker.currentNode;
+            const parent = node.parentElement;
+            if (!parent) continue;
+            const block = nearestTextBlock(parent);
+            if (!block || handledBlocks.has(block)) continue;
+            const text = block.textContent ? block.textContent.trim().replace(/\\s+/g, " ") : "";
+            if (!text) continue;
+            const id = "t_" + counter++;
+            handledBlocks.add(block);
+            nodeMap.set(id, block);
+            sourceTextMap.set(id, text);
+            block.__mirrowOriginalText = text;
+            items.push({ id, text });
+
+            forceSkeletonHost(block);
+            if (!document.querySelector('[data-mirrow-skeleton-for="' + CSS.escape(id) + '"]')) {
+              const skeleton = document.createElement("span");
+              skeleton.dataset.mirrowSkeletonFor = id;
+              skeleton.className = "mirrow-text-skeleton";
+              skeleton.setAttribute("dir", "rtl");
+              skeleton.textContent = " ";
+              const width = Math.max(36, Math.min(420, text.length * 7));
+              skeleton.style.setProperty("--mirrow-skeleton-width", width + "px");
+              block.textContent = "";
+              block.appendChild(skeleton);
+            }
+          }
+
+          window.__mirrowNodeMap = nodeMap;
+          window.__mirrowSourceTextMap = sourceTextMap;
+          window.__mirrowInstantItemsByToken = window.__mirrowInstantItemsByToken instanceof Map ? window.__mirrowInstantItemsByToken : new Map();
+          window.__mirrowInstantItemsByToken.set(token, items);
+          if (!items.length) root.removeAttribute("data-mirrow-pending");
+          return items;
         }
 
         function onMouseOver(event) {
