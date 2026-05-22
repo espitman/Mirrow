@@ -208,7 +208,7 @@ export class BrowserController {
     let translatedCount = 0;
     let partialFailure = false;
 
-    await this.applyTranslationFocus(Boolean(options.selectedOnly));
+    await this.applyTranslationFocus(Boolean(options.selectedOnly), items);
 
     for (let index = 0; index < items.length; index += batchSize) {
       if (this.translationCancelled) break;
@@ -385,7 +385,9 @@ export class BrowserController {
             ".mirrow-persian-text{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;font-family:Vazirmatn,Vazir,Tahoma,Arial,sans-serif!important;}",
             ".mirrow-retranslate-button{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;direction:ltr!important;text-align:center!important;}",
             ".mirrow-dimmed{opacity:.16!important;filter:saturate(.45)!important;transition:opacity .2s ease,filter .2s ease!important;}",
-            ".mirrow-focus-target{opacity:1!important;filter:none!important;}"
+            ".mirrow-focus-target{opacity:1!important;filter:none!important;}",
+            ".mirrow-text-skeleton{display:inline-block!important;width:var(--mirrow-skeleton-width,120px)!important;height:1em!important;min-height:14px!important;border-radius:999px!important;background:linear-gradient(90deg,rgba(148,163,184,.18),rgba(148,163,184,.42),rgba(148,163,184,.18))!important;background-size:220% 100%!important;animation:mirrowSkeletonPulse 1.1s ease-in-out infinite!important;vertical-align:-.12em!important;}",
+            "@keyframes mirrowSkeletonPulse{0%{background-position:220% 0}100%{background-position:-220% 0}}"
           ].join("\\n");
           document.head.appendChild(style);
         }
@@ -470,6 +472,8 @@ export class BrowserController {
           const node = nodeMap.get(item.id);
           if (node && item.translation) {
             node.textContent = item.translation;
+            const skeleton = document.querySelector('[data-mirrow-skeleton-for="' + CSS.escape(item.id) + '"]');
+            if (skeleton) skeleton.remove();
             if (/[\u0600-\u06FF]/.test(item.translation) && node.parentElement) {
               forcePersianTypography(node.parentElement);
               forcePersianTypography(nearestTextBlock(node.parentElement));
@@ -634,7 +638,7 @@ export class BrowserController {
     await this.view.webContents.executeJavaScript(script, true);
   }
 
-  private async applyTranslationFocus(selectedOnly: boolean) {
+  private async applyTranslationFocus(selectedOnly: boolean, items: TranslationItem[]) {
     if (!this.view) return;
 
     const script = `
@@ -655,6 +659,27 @@ export class BrowserController {
 
         document.querySelectorAll(".mirrow-dimmed").forEach((el) => el.classList.remove("mirrow-dimmed"));
 
+        const itemIds = ${JSON.stringify(items.map((item) => item.id))};
+
+        function addSkeletons() {
+          const nodeMap = window.__mirrowNodeMap;
+          if (!nodeMap) return;
+          for (const id of itemIds) {
+            const node = nodeMap.get(id);
+            if (!node || !node.parentElement) continue;
+            if (document.querySelector('[data-mirrow-skeleton-for="' + CSS.escape(id) + '"]')) continue;
+            const text = node.textContent || "";
+            const skeleton = document.createElement("span");
+            skeleton.dataset.mirrowSkeletonFor = id;
+            skeleton.className = "mirrow-text-skeleton";
+            skeleton.textContent = " ";
+            const width = Math.max(36, Math.min(420, text.trim().length * 7));
+            skeleton.style.setProperty("--mirrow-skeleton-width", width + "px");
+            node.parentElement.insertBefore(skeleton, node.nextSibling);
+            node.textContent = "";
+          }
+        }
+
         if (${JSON.stringify(selectedOnly)}) {
           const selected = new Set(Array.from(document.querySelectorAll("[data-mirrow-include='true']")));
           for (const child of Array.from(document.body.children)) {
@@ -662,10 +687,12 @@ export class BrowserController {
             if (!containsSelected) child.classList.add("mirrow-dimmed");
           }
           selected.forEach((node) => node.classList.add("mirrow-focus-target"));
+          addSkeletons();
           return;
         }
 
         document.querySelectorAll("[data-mirrow-skip='true']").forEach((node) => node.classList.add("mirrow-dimmed"));
+        addSkeletons();
       })();
     `;
 
