@@ -1,4 +1,4 @@
-import { CheckSquare, Eraser, Languages, MousePointer2, Square, Zap } from "lucide-react";
+import { Languages, Square, Zap } from "lucide-react";
 import { LANGUAGE_OPTIONS } from "../../shared/constants";
 import type { TranslationProgress } from "../../shared/types";
 
@@ -8,20 +8,12 @@ type TranslateControlsProps = {
   isTranslating: boolean;
   progress: TranslationProgress | null;
   error: string | null;
-  exclusionMode: boolean;
-  selectionMode: boolean;
   instantTranslateMode: boolean;
-  translationScope: "full" | "pick" | "exclude";
   onSourceLanguageChange: (value: string) => void;
   onTargetLanguageChange: (value: string) => void;
   onTranslate: () => void;
   onCancel: () => void;
-  onToggleExclusionMode: () => void;
-  onClearExclusions: () => void;
-  onToggleSelectionMode: () => void;
   onToggleInstantTranslateMode: () => void;
-  onClearSelections: () => void;
-  onFullPageMode: () => void;
 };
 
 export function TranslateControls({
@@ -30,20 +22,12 @@ export function TranslateControls({
   isTranslating,
   progress,
   error,
-  exclusionMode,
-  selectionMode,
   instantTranslateMode,
-  translationScope,
   onSourceLanguageChange,
   onTargetLanguageChange,
   onTranslate,
   onCancel,
-  onToggleExclusionMode,
-  onClearExclusions,
-  onToggleSelectionMode,
   onToggleInstantTranslateMode,
-  onClearSelections,
-  onFullPageMode,
 }: TranslateControlsProps) {
   const percent = progress ? Math.round((progress.completed / Math.max(progress.total, 1)) * 100) : 0;
 
@@ -52,7 +36,7 @@ export function TranslateControls({
       <div className="flex items-center gap-3">
         <button className="primary-button" onClick={onTranslate} disabled={isTranslating}>
           <Languages size={17} />
-          {isTranslating ? "Translating" : translationScope === "pick" ? "Translate Picked" : "Translate Page"}
+          {isTranslating ? "Translating" : "Translate Page"}
         </button>
         {isTranslating && (
           <button type="button" className="secondary-button border-rose-400/40 text-rose-200" onClick={onCancel}>
@@ -62,44 +46,12 @@ export function TranslateControls({
         )}
         <button
           type="button"
-          className={translationScope === "full" ? "primary-button bg-slate-600 hover:bg-slate-600/90" : "secondary-button"}
-          onClick={onFullPageMode}
-          title="Translate the full page"
-        >
-          Full
-        </button>
-        <button
-          type="button"
-          className={translationScope === "pick" ? "primary-button bg-emerald-500 hover:bg-emerald-500/90" : "secondary-button"}
-          onClick={onToggleSelectionMode}
-          title="Click page elements to include them in selected-only translation"
-        >
-          <CheckSquare size={16} />
-          {selectionMode ? "Picking" : "Pick"}
-        </button>
-        <button
-          type="button"
           className={instantTranslateMode ? "primary-button bg-violet hover:bg-violet/90" : "secondary-button"}
           onClick={onToggleInstantTranslateMode}
           title="Click a page section to translate it immediately"
         >
           <Zap size={16} />
           {instantTranslateMode ? "Quicking" : "Quick"}
-        </button>
-        <button
-          type="button"
-          className={translationScope === "exclude" ? "primary-button bg-rose-500 hover:bg-rose-500/90" : "secondary-button"}
-          onClick={onToggleExclusionMode}
-          title="Click page elements to exclude them from translation"
-        >
-          <MousePointer2 size={16} />
-          {exclusionMode ? "Selecting" : "Exclude"}
-        </button>
-        <button type="button" className="icon-button" onClick={onClearExclusions} title="Clear excluded elements">
-          <Eraser size={16} />
-        </button>
-        <button type="button" className="icon-button" onClick={onClearSelections} title="Clear picked elements">
-          <CheckSquare size={16} />
         </button>
         <select className="field max-w-[170px]" value={sourceLanguage} onChange={(event) => onSourceLanguageChange(event.target.value)}>
           {LANGUAGE_OPTIONS.map((language) => (

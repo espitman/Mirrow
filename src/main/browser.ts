@@ -460,6 +460,11 @@ export class BrowserController {
     const script = `
       (() => {
         const token = ${JSON.stringify(token)};
+        if (window.__mirrowInstantItemsByToken instanceof Map && window.__mirrowInstantItemsByToken.has(token)) {
+          const items = window.__mirrowInstantItemsByToken.get(token) || [];
+          window.__mirrowInstantItemsByToken.delete(token);
+          return items;
+        }
         const root = Array.from(document.querySelectorAll("[data-mirrow-live-pick-id]"))
           .find((node) => node.dataset.mirrowLivePickId === token);
         if (!root || root.dataset.mirrowTranslated === "true" || root.dataset.mirrowPending === "true") return [];
@@ -762,6 +767,7 @@ export class BrowserController {
           ".mirrow-dimmed{opacity:.16!important;filter:saturate(.45)!important;transition:opacity .2s ease,filter .2s ease!important;}",
           ".mirrow-focus-target{opacity:1!important;filter:none!important;}",
           ".mirrow-pick-hover{background:rgba(56,189,248,.14)!important;box-shadow:inset 0 0 0 9999px rgba(56,189,248,.035)!important;transition:background .12s ease,box-shadow .12s ease!important;}",
+          ".mirrow-instant-hover{outline:2px solid #8b5cf6!important;outline-offset:2px!important;background:rgba(139,92,246,.12)!important;}",
           ".mirrow-picked-preview{background:rgba(34,197,94,.12)!important;box-shadow:inset 0 0 0 9999px rgba(34,197,94,.04)!important;transition:background .16s ease,box-shadow .16s ease!important;}",
           ".mirrow-excluded-preview{opacity:.34!important;filter:saturate(.45)!important;transition:opacity .16s ease,filter .16s ease!important;}",
           ".mirrow-skeleton-host{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;}",
@@ -918,11 +924,127 @@ export class BrowserController {
         if (!${JSON.stringify(enabled)}) return false;
 
         function isIgnored(el) {
-          return !el ||
+          if (!el ||
             el === document.documentElement ||
             el === document.body ||
             el.closest(".mirrow-retranslate-button") ||
-            ["HTML", "BODY", "SCRIPT", "STYLE", "NOSCRIPT", "IFRAME"].includes(el.tagName);
+            el.closest(".mirrow-text-skeleton") ||
+            ["HTML", "BODY", "SCRIPT", "STYLE", "NOSCRIPT", "IFRAME"].includes(el.tagName)) {
+            return true;
+          }
+          const block = nearestTextBlock(el);
+          return !block || block.closest("[data-mirrow-translated='true']") || block.closest("[data-mirrow-pending='true']");
+        }
+
+        function shouldSkipElement(el) {
+          const tag = el.tagName.toLowerCase();
+          if (el.closest(".mirrow-retranslate-button")) return true;
+          if (el.closest(".mirrow-text-skeleton")) return true;
+          return [
+            "script", "style", "noscript", "svg", "canvas", "input",
+            "textarea", "code", "pre", "iframe", "select", "option", "button"
+          ].includes(tag);
+        }
+
+        function isVisibleElement(el) {
+          const style = window.getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          return style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            style.opacity !== "0" &&
+            rect.width > 0 &&
+            rect.height > 0;
+        }
+
+        function nearestTextBlock(el) {
+          let current = el;
+          while (current && current !== document.body) {
+            const style = window.getComputedStyle(current);
+            const tag = current.tagName.toLowerCase();
+            if (
+              ["p", "li", "article", "section", "header", "footer", "main", "aside", "nav", "blockquote", "figcaption", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tag) ||
+              ["block", "list-item", "table-cell", "flex", "grid"].includes(style.display)
+            ) {
+              return current;
+            }
+            current = current.parentElement;
+          }
+          return el;
+        }
+
+        function forceSkeletonHost(el) {
+          if (!el) return;
+          el.classList.add("mirrow-skeleton-host");
+          el.setAttribute("dir", "rtl");
+          el.style.setProperty("direction", "rtl", "important");
+          el.style.setProperty("text-align", "right", "important");
+          el.style.setProperty("unicode-bidi", "plaintext", "important");
+        }
+
+        function collectAndSkeleton(root, token) {
+          if (!root || root.dataset.mirrowTranslated === "true" || root.dataset.mirrowPending === "true") return [];
+          root.dataset.mirrowPending = "true";
+          root.dataset.mirrowLivePickId = token;
+
+          const items = [];
+          const nodeMap = window.__mirrowNodeMap instanceof Map ? window.__mirrowNodeMap : new Map();
+          const sourceTextMap = window.__mirrowSourceTextMap instanceof Map ? window.__mirrowSourceTextMap : new Map();
+          const handledBlocks = new Set();
+          let counter = nodeMap.size;
+          const walker = document.createTreeWalker(
+            root,
+            NodeFilter.SHOW_TEXT,
+            {
+              acceptNode(node) {
+                const text = node.textContent ? node.textContent.trim() : "";
+                if (!text) return NodeFilter.FILTER_REJECT;
+                if (text.length <= 1 && !/[A-Za-z0-9\\u0600-\\u06FF]/.test(text)) return NodeFilter.FILTER_REJECT;
+                const parent = node.parentElement;
+                if (!parent) return NodeFilter.FILTER_REJECT;
+                if (parent.closest("[data-mirrow-skip='true']")) return NodeFilter.FILTER_REJECT;
+                if (parent.closest("[data-mirrow-translated='true']")) return NodeFilter.FILTER_REJECT;
+                if (shouldSkipElement(parent)) return NodeFilter.FILTER_REJECT;
+                if (!isVisibleElement(parent)) return NodeFilter.FILTER_REJECT;
+                return NodeFilter.FILTER_ACCEPT;
+              }
+            }
+          );
+
+          while (walker.nextNode()) {
+            const node = walker.currentNode;
+            const parent = node.parentElement;
+            if (!parent) continue;
+            const block = nearestTextBlock(parent);
+            if (!block || handledBlocks.has(block)) continue;
+            const text = block.textContent ? block.textContent.trim().replace(/\\s+/g, " ") : "";
+            if (!text) continue;
+            const id = "t_" + counter++;
+            handledBlocks.add(block);
+            nodeMap.set(id, block);
+            sourceTextMap.set(id, text);
+            block.__mirrowOriginalText = text;
+            items.push({ id, text });
+
+            forceSkeletonHost(block);
+            if (!document.querySelector('[data-mirrow-skeleton-for="' + CSS.escape(id) + '"]')) {
+              const skeleton = document.createElement("span");
+              skeleton.dataset.mirrowSkeletonFor = id;
+              skeleton.className = "mirrow-text-skeleton";
+              skeleton.setAttribute("dir", "rtl");
+              skeleton.textContent = " ";
+              const width = Math.max(36, Math.min(420, text.length * 7));
+              skeleton.style.setProperty("--mirrow-skeleton-width", width + "px");
+              block.textContent = "";
+              block.appendChild(skeleton);
+            }
+          }
+
+          window.__mirrowNodeMap = nodeMap;
+          window.__mirrowSourceTextMap = sourceTextMap;
+          window.__mirrowInstantItemsByToken = window.__mirrowInstantItemsByToken instanceof Map ? window.__mirrowInstantItemsByToken : new Map();
+          window.__mirrowInstantItemsByToken.set(token, items);
+          if (!items.length) root.removeAttribute("data-mirrow-pending");
+          return items;
         }
 
         function onMouseOver(event) {
@@ -1003,6 +1125,7 @@ export class BrowserController {
           ".mirrow-dimmed{opacity:.16!important;filter:saturate(.45)!important;transition:opacity .2s ease,filter .2s ease!important;}",
           ".mirrow-focus-target{opacity:1!important;filter:none!important;}",
           ".mirrow-pick-hover{outline:2px solid #38bdf8!important;outline-offset:2px!important;background:rgba(56,189,248,.10)!important;}",
+          ".mirrow-instant-hover{outline:2px solid #8b5cf6!important;outline-offset:2px!important;background:rgba(139,92,246,.12)!important;}",
           ".mirrow-picked-preview{outline:2px solid #22c55e!important;outline-offset:2px!important;background:rgba(34,197,94,.12)!important;box-shadow:inset 0 0 0 9999px rgba(34,197,94,.04)!important;}",
           ".mirrow-excluded-preview{opacity:.34!important;filter:saturate(.45)!important;transition:opacity .16s ease,filter .16s ease!important;}",
           ".mirrow-skeleton-host{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;}",
@@ -1128,13 +1251,13 @@ export class BrowserController {
         function onMouseOver(event) {
           const el = event.target;
           if (isIgnored(el)) return;
-          el.classList.add("mirrow-instant-hover");
+          nearestTextBlock(el).classList.add("mirrow-instant-hover");
         }
 
         function onMouseOut(event) {
           const el = event.target;
           if (isIgnored(el)) return;
-          el.classList.remove("mirrow-instant-hover");
+          nearestTextBlock(el).classList.remove("mirrow-instant-hover");
         }
 
         function onClick(event) {
@@ -1145,8 +1268,10 @@ export class BrowserController {
           event.stopImmediatePropagation();
 
           const token = (window.crypto && window.crypto.randomUUID && window.crypto.randomUUID()) || String(Date.now()) + "_" + Math.random().toString(36).slice(2);
-          el.dataset.mirrowLivePickId = token;
-          el.classList.remove("mirrow-instant-hover");
+          const block = nearestTextBlock(el);
+          block.classList.remove("mirrow-instant-hover");
+          const items = collectAndSkeleton(block, token);
+          if (!items.length) return;
           console.log("__MIRROW_INSTANT_TRANSLATE__:" + token);
         }
 
@@ -1189,6 +1314,7 @@ export class BrowserController {
           ".mirrow-dimmed{opacity:.16!important;filter:saturate(.45)!important;transition:opacity .2s ease,filter .2s ease!important;}",
           ".mirrow-focus-target{opacity:1!important;filter:none!important;}",
           ".mirrow-pick-hover{background:rgba(56,189,248,.14)!important;box-shadow:inset 0 0 0 9999px rgba(56,189,248,.035)!important;transition:background .12s ease,box-shadow .12s ease!important;}",
+          ".mirrow-instant-hover{outline:2px solid #8b5cf6!important;outline-offset:2px!important;background:rgba(139,92,246,.12)!important;}",
           ".mirrow-picked-preview{background:rgba(34,197,94,.12)!important;box-shadow:inset 0 0 0 9999px rgba(34,197,94,.04)!important;transition:background .16s ease,box-shadow .16s ease!important;}",
           ".mirrow-excluded-preview{opacity:.34!important;filter:saturate(.45)!important;transition:opacity .16s ease,filter .16s ease!important;}",
           ".mirrow-skeleton-host{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;}",

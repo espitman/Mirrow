@@ -17,10 +17,7 @@ export function BrowserShell() {
   const [sourceLanguage, setSourceLanguage] = useState("auto");
   const [targetLanguage, setTargetLanguage] = useState("Persian");
   const [isTranslating, setIsTranslating] = useState(false);
-  const [exclusionMode, setExclusionMode] = useState(false);
-  const [selectionMode, setSelectionMode] = useState(false);
   const [instantTranslateMode, setInstantTranslateMode] = useState(false);
-  const [translationScope, setTranslationScope] = useState<"full" | "pick" | "exclude">("full");
   const [progress, setProgress] = useState<TranslationProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +67,7 @@ export function BrowserShell() {
 
   const loadUrl = (url: string) => {
     setError(null);
+    setInstantTranslateMode(false);
     window.mirrow.browser.loadUrl(url).then(setBrowserState).catch((nextError: Error) => setError(nextError.message));
   };
 
@@ -77,17 +75,8 @@ export function BrowserShell() {
     setError(null);
     setProgress(null);
     setIsTranslating(true);
-    if (exclusionMode) {
-      window.mirrow.browser.setExclusionMode(false).then(() => setExclusionMode(false)).catch(() => undefined);
-    }
-    if (selectionMode && translationScope !== "pick") {
-      window.mirrow.browser.setSelectionMode(false).then(() => setSelectionMode(false)).catch(() => undefined);
-    }
-    if (instantTranslateMode) {
-      window.mirrow.browser.setInstantTranslateMode(false).then(() => setInstantTranslateMode(false)).catch(() => undefined);
-    }
     window.mirrow.translation
-      .start({ sourceLanguage, targetLanguage, selectedOnly: translationScope === "pick" })
+      .start({ sourceLanguage, targetLanguage, selectedOnly: false })
       .catch((nextError: Error) => setError(nextError.message))
       .finally(() => setIsTranslating(false));
   };
@@ -108,10 +97,7 @@ export function BrowserShell() {
         isTranslating={isTranslating}
         progress={progress}
         error={error}
-        exclusionMode={exclusionMode}
-        selectionMode={selectionMode}
         instantTranslateMode={instantTranslateMode}
-        translationScope={translationScope}
         onSourceLanguageChange={setSourceLanguage}
         onTargetLanguageChange={setTargetLanguage}
         onTranslate={translate}
@@ -119,63 +105,12 @@ export function BrowserShell() {
           window.mirrow.translation.cancel().catch((nextError: Error) => setError(nextError.message));
           setIsTranslating(false);
         }}
-        onToggleExclusionMode={() => {
-          const next = !exclusionMode;
-          setTranslationScope("exclude");
-          window.mirrow.browser
-            .setExclusionMode(next)
-            .then((state) => {
-              setExclusionMode(state.enabled);
-              if (state.enabled) setSelectionMode(false);
-              if (state.enabled) setInstantTranslateMode(false);
-            })
-            .catch((nextError: Error) => setError(nextError.message));
-        }}
-        onClearExclusions={() => {
-          window.mirrow.browser
-            .clearExclusions()
-            .then((count) => setError(count ? `Cleared ${count} excluded elements.` : null))
-            .catch((nextError: Error) => setError(nextError.message));
-        }}
-        onToggleSelectionMode={() => {
-          const next = !selectionMode;
-          setTranslationScope("pick");
-          window.mirrow.browser
-            .setSelectionMode(next)
-            .then((state) => {
-              setSelectionMode(state.enabled);
-              if (state.enabled) setExclusionMode(false);
-              if (state.enabled) setInstantTranslateMode(false);
-            })
-            .catch((nextError: Error) => setError(nextError.message));
-        }}
         onToggleInstantTranslateMode={() => {
           const next = !instantTranslateMode;
           window.mirrow.browser
             .setInstantTranslateMode(next)
-            .then((state) => {
-              setInstantTranslateMode(state.enabled);
-              if (state.enabled) {
-                setSelectionMode(false);
-                setExclusionMode(false);
-              }
-            })
+            .then((state) => setInstantTranslateMode(state.enabled))
             .catch((nextError: Error) => setError(nextError.message));
-        }}
-        onClearSelections={() => {
-          window.mirrow.browser
-            .clearSelections()
-            .then((count) => setError(count ? `Cleared ${count} picked elements.` : null))
-            .catch((nextError: Error) => setError(nextError.message));
-        }}
-        onFullPageMode={() => {
-          setTranslationScope("full");
-          setSelectionMode(false);
-          setExclusionMode(false);
-          setInstantTranslateMode(false);
-          window.mirrow.browser.setSelectionMode(false).catch(() => undefined);
-          window.mirrow.browser.setExclusionMode(false).catch(() => undefined);
-          window.mirrow.browser.setInstantTranslateMode(false).catch(() => undefined);
         }}
       />
       <div className="relative min-h-0 flex-1 bg-[#f8fafc]" ref={viewportRef}>
