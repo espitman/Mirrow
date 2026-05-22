@@ -265,26 +265,34 @@ export class BrowserController {
     return complete;
   }
 
-  async retranslateNode(id: string) {
-    if (!this.view || !id) return;
+  async retranslateNode(idList: string) {
+    if (!this.view || !idList) return;
+    const ids = idList.split(",").map((id) => id.trim()).filter(Boolean);
+    if (!ids.length) return;
 
-    const text = await this.view.webContents.executeJavaScript(
+    const items = await this.view.webContents.executeJavaScript(
       `
         (() => {
-          const node = window.__mirrowNodeMap && window.__mirrowNodeMap.get(${JSON.stringify(id)});
-          return node ? (node.textContent || "").trim() : "";
+          const ids = ${JSON.stringify(ids)};
+          const items = [];
+          for (const id of ids) {
+            const node = window.__mirrowNodeMap && window.__mirrowNodeMap.get(id);
+            const text = node ? (node.textContent || "").trim() : "";
+            if (text) items.push({ id, text });
+          }
+          return items;
         })();
       `,
       true,
-    );
+    ) as TranslationItem[];
 
-    if (!text) return;
+    if (!items.length) return;
 
     const settings = await getSettings();
     const result = await translateBatch(
       {
         targetLanguage: settings.defaultTargetLanguage,
-        items: [{ id, text }],
+        items,
       },
       settings,
     );
@@ -406,34 +414,53 @@ export class BrowserController {
 
         function ensureRetranslateButton(el, id) {
           const host = nearestTextBlock(el);
-          if (!host || Array.from(host.children).some((child) => child.classList.contains("mirrow-retranslate-button") && child.dataset.mirrowNodeId === id)) return;
-          const button = document.createElement("button");
+          if (!host) return;
+
+          const existingIds = (host.dataset.mirrowNodeIds || "")
+            .split(",")
+            .filter(Boolean);
+          if (!existingIds.includes(id)) {
+            existingIds.push(id);
+            host.dataset.mirrowNodeIds = existingIds.join(",");
+          }
+
+          let button = Array.from(host.children).find((child) => child.classList.contains("mirrow-retranslate-button"));
+          if (button) return;
+
+          const computedPosition = window.getComputedStyle(host).position;
+          if (computedPosition === "static") {
+            host.style.position = "relative";
+          }
+          host.style.setProperty("padding-inline-end", "38px", "important");
+
+          button = document.createElement("button");
           button.type = "button";
           button.className = "mirrow-retranslate-button";
-          button.dataset.mirrowNodeId = id;
           button.textContent = "↻";
           button.title = "Retranslate this part";
           button.style.cssText = [
             "display:inline-flex",
             "align-items:center",
             "justify-content:center",
-            "width:22px",
-            "height:22px",
-            "margin-inline-start:6px",
+            "width:28px",
+            "height:28px",
+            "padding:0",
             "border-radius:6px",
             "border:1px solid rgba(139,92,246,.5)",
             "background:rgba(139,92,246,.16)",
             "color:#7c3aed",
-            "font:600 14px system-ui",
+            "font:600 16px system-ui",
             "cursor:pointer",
-            "vertical-align:middle",
-            "position:relative",
+            "position:absolute",
+            "inset-inline-end:4px",
+            "top:50%",
+            "transform:translateY(-50%)",
             "z-index:2147483647"
           ].join(";");
           button.addEventListener("click", (event) => {
             event.preventDefault();
             event.stopPropagation();
-            console.log("__MIRROW_RETRANSLATE__:" + id);
+            console.log("__MIRROW_RETRANSLATE__:" + (host.dataset.mirrowNodeIds || id));
           });
           host.appendChild(button);
         }
