@@ -10,6 +10,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   onlineBaseUrl: "https://ai.liara.ir/api/6a0ccd2d298429714a4b3e25/v1",
   onlineModelName: "openai/gpt-4.1-mini",
   onlineApiKey: "",
+  googleBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
+  googleModelName: "gemini-flash-latest",
+  googleApiKey: "",
 };
 
 export const LANGUAGE_OPTIONS = [
@@ -20,6 +23,13 @@ export const LANGUAGE_OPTIONS = [
   { label: "Turkish", value: "Turkish" },
   { label: "French", value: "French" },
   { label: "German", value: "German" },
+];
+
+export const LIARA_MODEL_OPTIONS = [
+  { label: "GPT-4.1 Mini", value: "openai/gpt-4.1-mini" },
+  { label: "Mistral Nemo", value: "mistralai/mistral-nemo" },
+  { label: "Text Embedding 3 Small", value: "openai/text-embedding-3-small" },
+  { label: "Gemini 2.0 Flash Lite", value: "google/gemini-2.0-flash-lite-001" },
 ];
 
 export const TRANSLATION_SYSTEM_PROMPT =

@@ -15,6 +15,7 @@ export function useUpdateSettingsMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
       queryClient.invalidateQueries({ queryKey: ["lmstudio-status"] });
+      queryClient.invalidateQueries({ queryKey: ["google-ai-models"] });
     },
   });
 }
@@ -32,6 +33,14 @@ export function useLmStudioModelsQuery() {
     queryKey: ["lmstudio-models"],
     queryFn: () => window.mirrow.lmStudio.listModels(),
     refetchInterval: 10_000,
+  });
+}
+
+export function useGoogleAiModelsQuery(settings: Partial<AppSettings>, enabled: boolean) {
+  return useQuery({
+    queryKey: ["google-ai-models"],
+    queryFn: () => window.mirrow.googleAi.listModels(settings),
+    enabled,
   });
 }
 

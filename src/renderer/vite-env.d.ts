@@ -55,6 +55,9 @@ declare global {
         checkConnection: () => Promise<LmStudioStatus>;
         listModels: () => Promise<LmStudioModel[]>;
       };
+      googleAi: {
+        listModels: (settings?: Partial<AppSettings>) => Promise<LmStudioModel[]>;
+      };
       onlineCost: {
         get: () => Promise<OnlineCostState>;
         reset: () => Promise<OnlineCostState>;

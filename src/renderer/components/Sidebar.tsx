@@ -1,7 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { BookOpenText, Clock3, Languages, MonitorCog, Settings, Sparkles } from "lucide-react";
-import { useLmStudioStatusQuery, useSettingsQuery, useUpdateSettingsMutation } from "../lib/hooks";
+import { LIARA_MODEL_OPTIONS } from "../../shared/constants";
+import { useGoogleAiModelsQuery, useLmStudioModelsQuery, useLmStudioStatusQuery, useSettingsQuery, useUpdateSettingsMutation } from "../lib/hooks";
 import { StatusBadge } from "./StatusBadge";
 
 const navItems = [
@@ -16,6 +17,8 @@ export function Sidebar() {
   const settings = useSettingsQuery();
   const updateSettings = useUpdateSettingsMutation();
   const status = useLmStudioStatusQuery();
+  const localModels = useLmStudioModelsQuery();
+  const googleModels = useGoogleAiModelsQuery(settings.data ?? {}, Boolean(settings.data?.googleApiKey));
   const [onlineCost, setOnlineCost] = useState(0);
 
   useEffect(() => {
@@ -24,9 +27,53 @@ export function Sidebar() {
   }, []);
 
   const selectedEngine = settings.data?.translationEngine ?? "online";
-  const setEngine = (translationEngine: "online" | "local") => {
+  const setEngine = (translationEngine: "online" | "local" | "google") => {
     updateSettings.mutate({ translationEngine });
   };
+  const setModel = (model: string) => {
+    if (selectedEngine === "google") {
+      updateSettings.mutate({ googleModelName: model });
+      return;
+    }
+    if (selectedEngine === "online") {
+      updateSettings.mutate({ onlineModelName: model });
+      return;
+    }
+    updateSettings.mutate({ modelName: model });
+  };
+  const engineModel =
+    selectedEngine === "google"
+      ? (settings.data?.googleModelName ?? "gemini-flash-latest")
+      : selectedEngine === "online"
+        ? (settings.data?.onlineModelName ?? "openai/gpt-4.1-mini")
+        : (settings.data?.modelName ?? "translategemma-4b-it");
+  const engineProvider =
+    selectedEngine === "google"
+      ? "Google AI Studio (Gemini)"
+      : selectedEngine === "online"
+        ? "Liara (Online)"
+        : "LM Studio (Local)";
+  const modelOptions =
+    selectedEngine === "google"
+      ? [
+          ...(engineModel ? [{ label: engineModel, value: engineModel }] : []),
+          ...((googleModels.data ?? [])
+            .filter((model) => model.id !== engineModel)
+            .map((model) => ({ label: model.name, value: model.id }))),
+        ]
+      : selectedEngine === "online"
+        ? [
+            ...(engineModel && !LIARA_MODEL_OPTIONS.some((model) => model.value === engineModel)
+              ? [{ label: engineModel, value: engineModel }]
+              : []),
+            ...LIARA_MODEL_OPTIONS,
+          ]
+        : [
+            ...(engineModel && !localModels.data?.some((model) => model.id === engineModel)
+              ? [{ label: engineModel, value: engineModel }]
+              : []),
+            ...((localModels.data ?? []).map((model) => ({ label: model.name, value: model.id }))),
+          ];
 
   return (
     <aside className="drag-region flex h-full w-[292px] shrink-0 flex-col border-r border-white/10 bg-black/20 px-4 pb-4 pt-12 backdrop-blur-xl">
@@ -64,14 +111,8 @@ export function Sidebar() {
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <div className="text-xs uppercase text-slate-500">Engine</div>
-              <div className="mt-1 text-sm font-semibold text-white">
-                {settings.data?.translationEngine === "online"
-                  ? (settings.data?.onlineModelName ?? "openai/gpt-4.1-mini")
-                  : (settings.data?.modelName ?? "translategemma-4b-it")}
-              </div>
-              <div className="mt-1 text-xs text-slate-400">
-                {settings.data?.translationEngine === "online" ? "Liara (Online)" : "LM Studio (Local)"}
-              </div>
+              <div className="mt-1 break-words text-sm font-semibold text-white">{engineModel}</div>
+              <div className="mt-1 text-xs text-slate-400">{engineProvider}</div>
             </div>
             <MonitorCog className="text-violet" size={19} />
           </div>
@@ -81,12 +122,34 @@ export function Sidebar() {
               Change
             </Link>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-black/20 p-1 text-xs">
+          <label className="mt-3 block">
+            <span className="mb-1.5 block text-xs uppercase text-slate-500">Model</span>
+            <select
+              className="h-9 w-full rounded-lg border border-white/10 bg-black/20 px-2 text-xs text-white outline-none transition focus:border-violet/60"
+              value={engineModel}
+              onChange={(event) => setModel(event.target.value)}
+              disabled={updateSettings.isPending || !modelOptions.length}
+              title="Switch model"
+            >
+              {modelOptions.map((model) => (
+                <option key={model.value} value={model.value}>
+                  {model.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="mt-3 grid grid-cols-3 gap-1 rounded-lg bg-black/20 p-1 text-xs">
             <button
               className={`rounded-md px-2 py-1.5 transition ${selectedEngine === "online" ? "bg-violet text-white" : "text-slate-300 hover:bg-white/[0.08]"}`}
               onClick={() => setEngine("online")}
             >
               Online
+            </button>
+            <button
+              className={`rounded-md px-2 py-1.5 transition ${selectedEngine === "google" ? "bg-violet text-white" : "text-slate-300 hover:bg-white/[0.08]"}`}
+              onClick={() => setEngine("google")}
+            >
+              Google
             </button>
             <button
               className={`rounded-md px-2 py-1.5 transition ${selectedEngine === "local" ? "bg-violet text-white" : "text-slate-300 hover:bg-white/[0.08]"}`}
@@ -95,10 +158,10 @@ export function Sidebar() {
               Local
             </button>
           </div>
-          {selectedEngine === "online" && (
+          {(selectedEngine === "online" || selectedEngine === "google") && (
             <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs uppercase text-slate-500">Online cost</span>
+                <span className="text-xs uppercase text-slate-500">{selectedEngine === "google" ? "Google cost" : "Online cost"}</span>
                 <button
                   className="text-xs text-slate-400 hover:text-white"
                   onClick={() => window.mirrow.onlineCost.reset().then((state) => setOnlineCost(state.totalToman))}
@@ -106,7 +169,7 @@ export function Sidebar() {
                   Reset
                 </button>
               </div>
-              <div className="mt-1 text-lg font-semibold text-white">{Math.round(onlineCost).toLocaleString("fa-IR")} تومان</div>
+              <div className="mt-1 text-lg font-semibold text-white">{Math.round(onlineCost).toLocaleString("en-US")} Toman</div>
             </div>
           )}
         </section>

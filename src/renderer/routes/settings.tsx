@@ -1,15 +1,25 @@
 import { FormEvent, useEffect, useState } from "react";
 import { PlugZap, RefreshCw, Save } from "lucide-react";
-import { useLmStudioModelsQuery, useLmStudioStatusQuery, useSettingsQuery, useUpdateSettingsMutation } from "../lib/hooks";
+import {
+  useGoogleAiModelsQuery,
+  useLmStudioModelsQuery,
+  useLmStudioStatusQuery,
+  useSettingsQuery,
+  useUpdateSettingsMutation,
+} from "../lib/hooks";
 import { StatusBadge } from "../components/StatusBadge";
+import { LIARA_MODEL_OPTIONS } from "../../shared/constants";
+
+type SettingsTab = "engine" | "providers" | "general";
 
 export function SettingsPage() {
   const settings = useSettingsQuery();
   const updateSettings = useUpdateSettingsMutation();
   const status = useLmStudioStatusQuery();
   const localModels = useLmStudioModelsQuery();
+  const [activeTab, setActiveTab] = useState<SettingsTab>("engine");
   const [form, setForm] = useState({
-    translationEngine: "online" as "local" | "online",
+    translationEngine: "online" as "local" | "online" | "google",
     lmStudioBaseUrl: "",
     modelName: "",
     temperature: 0.2,
@@ -18,7 +28,11 @@ export function SettingsPage() {
     onlineBaseUrl: "",
     onlineModelName: "",
     onlineApiKey: "",
+    googleBaseUrl: "",
+    googleModelName: "",
+    googleApiKey: "",
   });
+  const googleModels = useGoogleAiModelsQuery(form, false);
 
   useEffect(() => {
     if (settings.data) setForm(settings.data);
@@ -28,10 +42,26 @@ export function SettingsPage() {
     if (form.lmStudioBaseUrl) localModels.refetch();
   }, [form.lmStudioBaseUrl]);
 
+  useEffect(() => {
+    if (form.googleApiKey && form.translationEngine === "google") googleModels.refetch();
+  }, [form.googleApiKey, form.googleBaseUrl, form.translationEngine]);
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     updateSettings.mutate(form);
   };
+
+  const engineLabel =
+    form.translationEngine === "google"
+      ? "Google AI Studio"
+      : form.translationEngine === "online"
+        ? "Liara / OpenAI-compatible"
+        : "LM Studio";
+  const tabs: Array<{ id: SettingsTab; label: string }> = [
+    { id: "engine", label: "Engine" },
+    { id: "providers", label: "Providers" },
+    { id: "general", label: "General" },
+  ];
 
   return (
     <section className="h-full overflow-auto p-8">
@@ -43,8 +73,8 @@ export function SettingsPage() {
       <form onSubmit={submit} className="glass max-w-3xl rounded-xl p-6">
         <div className="mb-6 flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] p-4">
           <div>
-            <div className="text-sm font-medium text-white">{form.translationEngine === "online" ? "Liara / OpenAI-compatible" : "LM Studio"}</div>
-            <div className="mt-1 text-xs text-slate-400">{status.data?.message ?? "Checking local model server"}</div>
+            <div className="text-sm font-medium text-white">{engineLabel}</div>
+            <div className="mt-1 text-xs text-slate-400">{status.data?.message ?? "Checking translation provider"}</div>
           </div>
           <div className="flex items-center gap-3">
             <StatusBadge connected={status.data?.connected} loading={status.isLoading} />
@@ -55,20 +85,56 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="grid gap-5">
-          <label className="block">
-            <span className="mb-2 block text-sm text-slate-300">Translation engine</span>
-            <select
-              className="field"
-              value={form.translationEngine}
-              onChange={(event) => setForm((current) => ({ ...current, translationEngine: event.target.value as "local" | "online" }))}
+        <div className="mb-6 grid grid-cols-3 gap-1 rounded-lg bg-black/20 p-1 text-sm">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`rounded-md px-3 py-2 transition ${activeTab === tab.id ? "bg-violet text-white" : "text-slate-300 hover:bg-white/[0.08]"}`}
+              onClick={() => setActiveTab(tab.id)}
             >
-              <option value="online">Online - Liara/OpenAI-compatible</option>
-              <option value="local">Local - LM Studio</option>
-            </select>
-          </label>
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+        {activeTab === "engine" && (
+          <div className="grid gap-5">
+            <label className="block">
+              <span className="mb-2 block text-sm text-slate-300">Translation engine</span>
+              <select
+                className="field"
+                value={form.translationEngine}
+                onChange={(event) => setForm((current) => ({ ...current, translationEngine: event.target.value as "local" | "online" | "google" }))}
+              >
+                <option value="online">Online - Liara/OpenAI-compatible</option>
+                <option value="google">Google AI Studio - Gemini</option>
+                <option value="local">Local - LM Studio</option>
+              </select>
+            </label>
+
+            <div className="grid gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Active provider</span>
+                <span className="font-medium text-white">{engineLabel}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Model</span>
+                <span className="max-w-[320px] truncate font-medium text-white">
+                  {form.translationEngine === "google"
+                    ? form.googleModelName
+                    : form.translationEngine === "online"
+                      ? form.onlineModelName
+                      : form.modelName}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "providers" && (
+          <div className="grid gap-5">
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
             <div className="mb-4 text-sm font-medium text-white">Online provider</div>
             <div className="grid gap-4">
               <label className="block">
@@ -81,11 +147,20 @@ export function SettingsPage() {
               </label>
               <label className="block">
                 <span className="mb-2 block text-sm text-slate-300">Online model</span>
-                <input
+                <select
                   className="field"
                   value={form.onlineModelName}
                   onChange={(event) => setForm((current) => ({ ...current, onlineModelName: event.target.value }))}
-                />
+                >
+                  {form.onlineModelName && !LIARA_MODEL_OPTIONS.some((model) => model.value === form.onlineModelName) && (
+                    <option value={form.onlineModelName}>{form.onlineModelName}</option>
+                  )}
+                  {LIARA_MODEL_OPTIONS.map((model) => (
+                    <option key={model.value} value={model.value}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="block">
                 <span className="mb-2 block text-sm text-slate-300">API key</span>
@@ -98,9 +173,59 @@ export function SettingsPage() {
                 />
               </label>
             </div>
-          </div>
+            </div>
 
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="text-sm font-medium text-white">Google AI Studio</div>
+              <button type="button" className="secondary-button" onClick={() => googleModels.refetch()} disabled={googleModels.isFetching || !form.googleApiKey}>
+                <RefreshCw size={16} className={googleModels.isFetching ? "animate-spin" : ""} />
+                Models
+              </button>
+            </div>
+            <div className="grid gap-4">
+              <label className="block">
+                <span className="mb-2 block text-sm text-slate-300">Gemini base URL</span>
+                <input
+                  className="field"
+                  value={form.googleBaseUrl}
+                  onChange={(event) => setForm((current) => ({ ...current, googleBaseUrl: event.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm text-slate-300">Gemini model</span>
+                <select
+                  className="field"
+                  value={form.googleModelName}
+                  onChange={(event) => setForm((current) => ({ ...current, googleModelName: event.target.value }))}
+                  disabled={googleModels.isFetching}
+                >
+                  {form.googleModelName && !googleModels.data?.some((model) => model.id === form.googleModelName) && (
+                    <option value={form.googleModelName}>{form.googleModelName}</option>
+                  )}
+                  {(googleModels.data ?? []).map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                  {!form.googleModelName && !(googleModels.data ?? []).length && <option value="">No Gemini models loaded</option>}
+                </select>
+                {googleModels.isError && <div className="mt-2 text-xs text-rose-300">Could not load Gemini models. Check the API key.</div>}
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm text-slate-300">Google AI Studio API key</span>
+                <input
+                  className="field"
+                  type="password"
+                  placeholder="AIza..."
+                  value={form.googleApiKey}
+                  onChange={(event) => setForm((current) => ({ ...current, googleApiKey: event.target.value }))}
+                />
+              </label>
+            </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="text-sm font-medium text-white">Local provider</div>
               <button type="button" className="secondary-button" onClick={() => localModels.refetch()} disabled={localModels.isFetching}>
@@ -138,7 +263,11 @@ export function SettingsPage() {
             {localModels.isError && <div className="mt-2 text-xs text-rose-300">Could not load local models. Check LM Studio server.</div>}
           </label>
             </div>
+            </div>
           </div>
+        )}
+
+        {activeTab === "general" && (
           <div className="grid grid-cols-3 gap-4">
             <label className="block">
               <span className="mb-2 block text-sm text-slate-300">Temperature</span>
@@ -172,7 +301,7 @@ export function SettingsPage() {
               />
             </label>
           </div>
-        </div>
+        )}
 
         <div className="mt-6 flex items-center gap-3">
           <button className="primary-button" disabled={updateSettings.isPending}>

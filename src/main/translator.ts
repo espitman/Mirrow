@@ -4,8 +4,13 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const GOOGLE_RETRY_ATTEMPTS = 3;
 
 export async function checkLmStudioConnection(settings: AppSettings): Promise<LmStudioStatus> {
+  if (settings.translationEngine === "google") {
+    return checkGoogleConnection(settings);
+  }
+
   if (settings.translationEngine === "online") {
     return checkOnlineConnection(settings);
   }
@@ -55,6 +60,29 @@ export async function listLmStudioModels(settings: AppSettings): Promise<LmStudi
     .map((id) => ({ id, name: id }));
 }
 
+export async function listGoogleAiModels(settings: AppSettings): Promise<LmStudioModel[]> {
+  const response = await fetch(resolveGoogleModelsUrl(settings), {
+    method: "GET",
+    headers: await googleRequestHeaders(settings),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Google AI Studio returned ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    models?: Array<{ name?: string; displayName?: string; supportedGenerationMethods?: string[] }>;
+  };
+
+  return (data.models ?? [])
+    .filter((model) => model.supportedGenerationMethods?.includes("generateContent"))
+    .map((model) => {
+      const id = String(model.name || "").replace(/^models\//, "").trim();
+      return { id, name: String(model.displayName || id) };
+    })
+    .filter((model) => Boolean(model.id));
+}
+
 export async function translateBatch(
   batch: TranslationBatch,
   settings: AppSettings,
@@ -62,33 +90,43 @@ export async function translateBatch(
   if (!batch.items.length) return { items: [] };
 
   let response: Response;
+  let content: string | undefined;
+  let costToman: number | undefined;
   try {
-    response = await fetch(resolveChatCompletionsUrl(settings), {
-      method: "POST",
-      headers: await requestHeaders(settings),
-      body: JSON.stringify({
-        model: resolveModelName(settings),
-        temperature: settings.temperature,
-        messages: [
-          { role: "system", content: TRANSLATION_SYSTEM_PROMPT },
-          { role: "user", content: JSON.stringify(batch) },
-        ],
-      }),
-    });
-  } catch {
-    throw new Error(settings.translationEngine === "online" ? "Online translation provider is unavailable." : "LM Studio is offline. Please start LM Studio and load the translategemma-4b-it model.");
-  }
+    if (settings.translationEngine === "google") {
+      const result = await callGoogleGenerateContent(settings, TRANSLATION_SYSTEM_PROMPT, JSON.stringify(batch), "json");
+      content = result.content;
+    } else {
+      response = await fetch(resolveChatCompletionsUrl(settings), {
+        method: "POST",
+        headers: await requestHeaders(settings),
+        body: JSON.stringify({
+          model: resolveModelName(settings),
+          temperature: settings.temperature,
+          messages: [
+            { role: "system", content: TRANSLATION_SYSTEM_PROMPT },
+            { role: "user", content: JSON.stringify(batch) },
+          ],
+        }),
+      });
 
-  if (!response.ok) {
-    throw new Error(`LM Studio error: ${response.status}`);
-  }
+      if (!response.ok) {
+        throw new Error(`${providerLabel(settings)} error: ${response.status}`);
+      }
 
-  const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const content = data?.choices?.[0]?.message?.content;
-  const costToman = settings.translationEngine === "online" ? extractProviderCostToman(data) : undefined;
+      const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      content = data?.choices?.[0]?.message?.content;
+      costToman = settings.translationEngine === "online" ? extractProviderCostToman(data) : undefined;
+    }
+  } catch (error) {
+    if (settings.translationEngine === "google") {
+      throw new Error(`${providerUnavailableMessage(settings)} ${readError(error)}`);
+    }
+    throw new Error(providerUnavailableMessage(settings));
+  }
 
   if (!content) {
-    throw new Error("Empty response from LM Studio");
+    throw new Error(`Empty response from ${providerLabel(settings)}`);
   }
 
   try {
@@ -264,7 +302,20 @@ async function repairTranslationJson(
   batch: TranslationBatch,
   settings: AppSettings,
 ): Promise<TranslationBatchResult> {
-  const response = await fetch(settings.lmStudioBaseUrl, {
+  if (settings.translationEngine === "google") {
+    const result = await callGoogleGenerateContent(
+      settings,
+      "Repair the translation response into valid JSON only. Return exactly this shape: {\"items\":[{\"id\":\"...\",\"translation\":\"...\"}]}. Preserve the ids from the requested items. Do not add markdown or explanations.",
+      JSON.stringify({
+        requestedItems: batch.items.map((item) => ({ id: item.id, text: item.text })),
+        invalidResponse: raw,
+      }),
+      "json",
+    );
+    return parseTranslationJson(result.content);
+  }
+
+  const response = await fetch(resolveChatCompletionsUrl(settings), {
     method: "POST",
     headers: await requestHeaders(settings),
     body: JSON.stringify({
@@ -288,12 +339,12 @@ async function repairTranslationJson(
   });
 
   if (!response.ok) {
-    throw new Error(`LM Studio repair error: ${response.status}`);
+    throw new Error(`${providerLabel(settings)} repair error: ${response.status}`);
   }
 
   const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Empty repair response from LM Studio");
+  if (!content) throw new Error(`Empty repair response from ${providerLabel(settings)}`);
 
   return parseTranslationJson(content);
 }
@@ -306,7 +357,21 @@ async function translateItemsIndividually(
   let totalCostToman = 0;
 
   for (const item of batch.items) {
-  const response = await fetch(settings.lmStudioBaseUrl, {
+    if (settings.translationEngine === "google") {
+      const result = await callGoogleGenerateContent(
+        settings,
+        "Translate the user text into natural Persian. Return only the translated text. Do not return JSON, markdown, quotes, labels, or explanations.",
+        item.text,
+        "text",
+      );
+      items.push({
+        id: item.id,
+        translation: cleanPlainTranslation(result.content || item.text),
+      });
+      continue;
+    }
+
+    const response = await fetch(resolveChatCompletionsUrl(settings), {
       method: "POST",
       headers: await requestHeaders(settings),
       body: JSON.stringify({
@@ -327,7 +392,7 @@ async function translateItemsIndividually(
     });
 
     if (!response.ok) {
-      throw new Error(`LM Studio individual translation error: ${response.status}`);
+      throw new Error(`${providerLabel(settings)} individual translation error: ${response.status}`);
     }
 
     const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
@@ -360,12 +425,44 @@ async function checkOnlineConnection(settings: AppSettings): Promise<LmStudioSta
   }
 }
 
+async function checkGoogleConnection(settings: AppSettings): Promise<LmStudioStatus> {
+  try {
+    const response = await fetch(resolveGoogleModelsUrl(settings), {
+      method: "GET",
+      headers: await googleRequestHeaders(settings),
+    });
+
+    if (!response.ok) {
+      return { connected: false, message: `Google AI Studio returned ${response.status}` };
+    }
+
+    return { connected: true, message: "Connected to Google AI Studio" };
+  } catch {
+    return { connected: false, message: "Google AI Studio is unavailable." };
+  }
+}
+
 function resolveChatCompletionsUrl(settings: AppSettings) {
   if (settings.translationEngine === "online") {
     return resolveEndpoint(settings.onlineBaseUrl, "/chat/completions");
   }
 
   return settings.lmStudioBaseUrl;
+}
+
+function resolveGoogleGenerateContentUrl(settings: AppSettings) {
+  const model = settings.googleModelName.trim().replace(/^models\//, "");
+  return resolveGoogleEndpoint(settings, `/models/${model}:generateContent`);
+}
+
+function resolveGoogleModelsUrl(settings: AppSettings) {
+  return resolveGoogleEndpoint(settings, "/models");
+}
+
+function resolveGoogleEndpoint(settings: AppSettings, path: string) {
+  const normalized = (settings.googleBaseUrl || "").trim().replace(/\/+$/, "");
+  if (normalized.endsWith(path)) return normalized;
+  return `${normalized}${path}`;
 }
 
 function resolveModelsUrl(baseUrl: string) {
@@ -388,6 +485,33 @@ function resolveModelName(settings: AppSettings) {
   return settings.translationEngine === "online" ? settings.onlineModelName : settings.modelName;
 }
 
+async function fetchWithRetry(input: string, init: RequestInit, attempts = GOOGLE_RETRY_ATTEMPTS) {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(input, init);
+      if (response.ok || !shouldRetryStatus(response.status) || attempt === attempts) return response;
+      lastError = new Error(`Retryable HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) throw error;
+    }
+
+    await delay(450 * attempt);
+  }
+
+  throw lastError;
+}
+
+function shouldRetryStatus(status: number) {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function requestHeaders(settings: AppSettings) {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (settings.translationEngine === "online") {
@@ -396,6 +520,56 @@ async function requestHeaders(settings: AppSettings) {
     headers.Authorization = `Bearer ${apiKey}`;
   }
   return headers;
+}
+
+async function googleRequestHeaders(settings: AppSettings) {
+  const apiKey = settings.googleApiKey.trim();
+  if (!apiKey) throw new Error("Add the Google AI Studio API key in Settings.");
+  return {
+    "Content-Type": "application/json",
+    "x-goog-api-key": apiKey,
+  };
+}
+
+async function callGoogleGenerateContent(
+  settings: AppSettings,
+  system: string,
+  user: string,
+  responseType: "json" | "text",
+) {
+  const response = await fetchWithRetry(resolveGoogleGenerateContentUrl(settings), {
+    method: "POST",
+    headers: await googleRequestHeaders(settings),
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: system }],
+      },
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: user }],
+        },
+      ],
+      generationConfig: {
+        temperature: settings.temperature,
+        ...(responseType === "json" ? { responseMimeType: "application/json" } : {}),
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Google AI Studio error: ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  return {
+    content: (data.candidates?.[0]?.content?.parts ?? [])
+      .map((part) => part.text || "")
+      .join("")
+      .trim(),
+  };
 }
 
 async function resolveOnlineApiKey(settings: AppSettings) {
@@ -427,6 +601,22 @@ function cleanPlainTranslation(raw: string) {
     .replace(/^["']|["']$/g, "")
     .replace(/^(translation|translated text|persian)\s*:\s*/i, "")
     .trim();
+}
+
+function providerLabel(settings: AppSettings) {
+  if (settings.translationEngine === "google") return "Google AI Studio";
+  if (settings.translationEngine === "online") return "Online provider";
+  return "LM Studio";
+}
+
+function providerUnavailableMessage(settings: AppSettings) {
+  if (settings.translationEngine === "google") return "Google AI Studio is unavailable or the API key/model is invalid.";
+  if (settings.translationEngine === "online") return "Online translation provider is unavailable.";
+  return "LM Studio is offline. Please start LM Studio and load the translategemma-4b-it model.";
+}
+
+function readError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function extractProviderCostToman(value: unknown): number | undefined {

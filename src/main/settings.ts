@@ -16,8 +16,12 @@ export async function updateSettings(next: Partial<AppSettings>): Promise<AppSet
 }
 
 export function sanitizeSettings(settings: AppSettings): AppSettings {
+  const translationEngine = ["local", "online", "google"].includes(settings.translationEngine)
+    ? settings.translationEngine
+    : DEFAULT_SETTINGS.translationEngine;
+
   return {
-    translationEngine: settings.translationEngine === "local" ? "local" : "online",
+    translationEngine,
     lmStudioBaseUrl: String(settings.lmStudioBaseUrl || DEFAULT_SETTINGS.lmStudioBaseUrl),
     modelName: String(settings.modelName || DEFAULT_SETTINGS.modelName),
     temperature: clampNumber(settings.temperature, 0, 2, DEFAULT_SETTINGS.temperature),
@@ -26,6 +30,9 @@ export function sanitizeSettings(settings: AppSettings): AppSettings {
     onlineBaseUrl: String(settings.onlineBaseUrl || DEFAULT_SETTINGS.onlineBaseUrl),
     onlineModelName: String(settings.onlineModelName || DEFAULT_SETTINGS.onlineModelName),
     onlineApiKey: String(settings.onlineApiKey || DEFAULT_SETTINGS.onlineApiKey),
+    googleBaseUrl: String(settings.googleBaseUrl || DEFAULT_SETTINGS.googleBaseUrl),
+    googleModelName: String(settings.googleModelName || DEFAULT_SETTINGS.googleModelName),
+    googleApiKey: String(settings.googleApiKey || DEFAULT_SETTINGS.googleApiKey),
   };
 }
 

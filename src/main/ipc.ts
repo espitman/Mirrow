@@ -2,8 +2,8 @@ import { ipcMain } from "electron";
 import type { AppSettings, BrowserBounds, HistoryItem, TranslationBatch, TranslatePageOptions } from "../shared/types.js";
 import type { BrowserController } from "./browser.js";
 import { addHistory, clearHistory, getHistory } from "./history.js";
-import { getSettings, updateSettings } from "./settings.js";
-import { checkLmStudioConnection, listLmStudioModels, translateBatch } from "./translator.js";
+import { getSettings, sanitizeSettings, updateSettings } from "./settings.js";
+import { checkLmStudioConnection, listGoogleAiModels, listLmStudioModels, translateBatch } from "./translator.js";
 
 export function registerIpc(browser: BrowserController) {
   [
@@ -30,6 +30,7 @@ export function registerIpc(browser: BrowserController) {
     "history:clear",
     "lmstudio:check-connection",
     "lmstudio:list-models",
+    "google-ai:list-models",
   ].forEach((channel) => ipcMain.removeHandler(channel));
 
   ipcMain.handle("browser:set-bounds", (_event, bounds: BrowserBounds) => browser.setBounds(bounds));
@@ -68,4 +69,7 @@ export function registerIpc(browser: BrowserController) {
 
   ipcMain.handle("lmstudio:check-connection", async () => checkLmStudioConnection(await getSettings()));
   ipcMain.handle("lmstudio:list-models", async () => listLmStudioModels(await getSettings()));
+  ipcMain.handle("google-ai:list-models", async (_event, settings?: Partial<AppSettings>) => {
+    return listGoogleAiModels(sanitizeSettings({ ...(await getSettings()), ...(settings ?? {}) }));
+  });
 }

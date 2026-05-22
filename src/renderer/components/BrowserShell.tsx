@@ -68,6 +68,7 @@ export function BrowserShell() {
   const loadUrl = (url: string) => {
     setError(null);
     setInstantTranslateMode(false);
+    window.mirrow.browser.setInstantTranslateMode(false).catch(() => undefined);
     window.mirrow.browser.loadUrl(url).then(setBrowserState).catch((nextError: Error) => setError(nextError.message));
   };
 
@@ -107,10 +108,14 @@ export function BrowserShell() {
         }}
         onToggleInstantTranslateMode={() => {
           const next = !instantTranslateMode;
+          setInstantTranslateMode(next);
           window.mirrow.browser
             .setInstantTranslateMode(next)
             .then((state) => setInstantTranslateMode(state.enabled))
-            .catch((nextError: Error) => setError(nextError.message));
+            .catch((nextError: Error) => {
+              setInstantTranslateMode(!next);
+              setError(nextError.message);
+            });
         }}
       />
       <div className="relative min-h-0 flex-1 bg-[#f8fafc]" ref={viewportRef}>

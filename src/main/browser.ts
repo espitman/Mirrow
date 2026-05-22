@@ -6,6 +6,8 @@ import type {
   InstantTranslateModeState,
   SelectionModeState,
   TranslationComplete,
+  TranslationBatch,
+  TranslationBatchResult,
   TranslationItem,
   TranslationProgress,
   TranslatePageOptions,
@@ -15,8 +17,11 @@ import { getSettings } from "./settings.js";
 import { translateBatch } from "./translator.js";
 
 const MIN_BROWSER_SIZE = 120;
-const LOCAL_TRANSLATION_CONCURRENCY = 4;
+const LOCAL_TRANSLATION_CONCURRENCY = 8;
 const ONLINE_TRANSLATION_CONCURRENCY = 2;
+const GOOGLE_TRANSLATION_CONCURRENCY = 3;
+const LOCAL_MIN_BATCH_SIZE = 36;
+const TRANSLATION_RETRY_ATTEMPTS = 3;
 
 export class BrowserController {
   private view: BrowserView | null = null;
@@ -49,7 +54,9 @@ export class BrowserController {
     this.window.setBrowserView(this.view);
     this.view.setAutoResize({ width: false, height: false });
     this.view.webContents.setWindowOpenHandler(({ url }) => {
-      this.loadUrl(url).catch((error: unknown) => this.sendError(readError(error)));
+      this.loadUrl(url).catch((error: unknown) => {
+        if (!isNavigationAbortError(error)) this.sendError(readError(error));
+      });
       return { action: "deny" };
     });
 
@@ -61,15 +68,19 @@ export class BrowserController {
     this.view.webContents.on("did-stop-loading", () => {
       this.isPageLoading = false;
       this.emitState();
+      this.reinjectInstantTranslateMode();
     });
     this.view.webContents.on("did-finish-load", () => {
       this.isPageLoading = false;
       this.emitState();
+      this.reinjectInstantTranslateMode();
     });
     this.view.webContents.on("did-navigate", () => {
       this.isPageLoading = false;
       this.emitState();
+      this.reinjectInstantTranslateMode();
     });
+    this.view.webContents.on("dom-ready", () => this.reinjectInstantTranslateMode());
     this.view.webContents.on("did-navigate-in-page", () => this.emitState());
     this.view.webContents.on("page-title-updated", () => this.emitState());
     this.view.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
@@ -130,6 +141,9 @@ export class BrowserController {
     this.emitState();
     try {
       await view.webContents.loadURL(url);
+      return this.getState();
+    } catch (error) {
+      if (!isNavigationAbortError(error)) throw error;
       return this.getState();
     } finally {
       this.isPageLoading = false;
@@ -199,8 +213,22 @@ export class BrowserController {
       this.selectionModeEnabled = false;
       await this.injectSelectionMode(false);
     }
-    await this.injectInstantTranslateMode(enabled);
+    if (enabled) {
+      this.reinjectInstantTranslateMode(0);
+    } else {
+      await this.injectInstantTranslateMode(false);
+    }
     return { enabled };
+  }
+
+  private reinjectInstantTranslateMode(delayMs = 50, attempt = 1) {
+    if (!this.instantTranslateModeEnabled || !this.view || this.view.webContents.isDestroyed()) return;
+    setTimeout(() => {
+      if (!this.instantTranslateModeEnabled || !this.view || this.view.webContents.isDestroyed()) return;
+      this.injectInstantTranslateMode(true).catch(() => {
+        if (attempt < 12) this.reinjectInstantTranslateMode(Math.min(1000, 120 * attempt), attempt + 1);
+      });
+    }, delayMs);
   }
 
   async clearExclusions() {
@@ -311,7 +339,7 @@ export class BrowserController {
     });
 
     const settings = await getSettings();
-    const batchSize = settings.batchSize;
+    const batchSize = resolveBatchSize(settings);
     let completed = 0;
     let translatedCount = 0;
     let partialFailure = false;
@@ -326,12 +354,12 @@ export class BrowserController {
     await this.applyTranslationFocus(Boolean(options.selectedOnly), items);
 
     const batches = chunkItems(items, batchSize);
-    const concurrency = settings.translationEngine === "local" ? LOCAL_TRANSLATION_CONCURRENCY : ONLINE_TRANSLATION_CONCURRENCY;
+    const concurrency = resolveTranslationConcurrency(settings.translationEngine);
     let nextBatchIndex = 0;
     this.sendProgress({
       completed: 0,
       total: items.length,
-      message: `Sending ${batches.length} batches...`,
+      message: `Sending ${batches.length} batches (${concurrency} parallel)...`,
     });
 
     const translateNextBatch = async () => {
@@ -342,7 +370,7 @@ export class BrowserController {
         if (!batchItems) return;
 
         try {
-          const result = await translateBatch(
+          const result = await this.translateBatchWithRetry(
             {
               sourceLanguage: options.sourceLanguage,
               targetLanguage: options.targetLanguage || settings.defaultTargetLanguage,
@@ -436,7 +464,7 @@ export class BrowserController {
 
     const settings = await getSettings();
     await this.applyRetranslationSkeleton(ids);
-    const result = await translateBatch(
+    const result = await this.translateBatchWithRetry(
       {
         targetLanguage: settings.defaultTargetLanguage,
         items,
@@ -466,7 +494,7 @@ export class BrowserController {
       total: items.length,
       message: `Queued picked section (${items.length} text nodes)`,
     });
-    const result = await translateBatch(
+    const result = await this.translateBatchWithRetry(
       {
         sourceLanguage: options.sourceLanguage,
         targetLanguage: options.targetLanguage || settings.defaultTargetLanguage,
@@ -479,6 +507,32 @@ export class BrowserController {
       this.onlineCostToman += result.costToman ?? 0;
       this.emitOnlineCost();
     }
+  }
+
+  private async translateBatchWithRetry(
+    batch: TranslationBatch,
+    settings: Awaited<ReturnType<typeof getSettings>>,
+  ): Promise<TranslationBatchResult> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= TRANSLATION_RETRY_ATTEMPTS; attempt += 1) {
+      if (this.translationCancelled) throw new Error("Translation stopped.");
+
+      try {
+        return await translateBatch(batch, settings);
+      } catch (error) {
+        lastError = error;
+        if (attempt === TRANSLATION_RETRY_ATTEMPTS) break;
+        this.sendProgress({
+          completed: 0,
+          total: batch.items.length,
+          message: `Retrying batch ${attempt + 1} / ${TRANSLATION_RETRY_ATTEMPTS}...`,
+        });
+        await delay(500 * attempt);
+      }
+    }
+
+    throw lastError;
   }
 
   private async collectPickedElementTextNodes(token: string): Promise<TranslationItem[]> {
@@ -568,6 +622,7 @@ export class BrowserController {
           }
         );
 
+        const blocksToSkeleton = [];
         while (walker.nextNode()) {
           const node = walker.currentNode;
           const parent = node.parentElement;
@@ -582,7 +637,10 @@ export class BrowserController {
           sourceTextMap.set(id, text);
           block.__mirrowOriginalText = text;
           items.push({ id, text });
+          blocksToSkeleton.push({ id, text, block });
+        }
 
+        for (const { id, text, block } of blocksToSkeleton) {
           forceSkeletonHost(block);
           if (!document.querySelector('[data-mirrow-skeleton-for="' + CSS.escape(id) + '"]')) {
             const skeleton = document.createElement("span");
@@ -1037,6 +1095,7 @@ export class BrowserController {
             }
           );
 
+          const blocksToSkeleton = [];
           while (walker.nextNode()) {
             const node = walker.currentNode;
             const parent = node.parentElement;
@@ -1051,7 +1110,10 @@ export class BrowserController {
             sourceTextMap.set(id, text);
             block.__mirrowOriginalText = text;
             items.push({ id, text });
+            blocksToSkeleton.push({ id, text, block });
+          }
 
+          for (const { id, text, block } of blocksToSkeleton) {
             forceSkeletonHost(block);
             if (!document.querySelector('[data-mirrow-skeleton-for="' + CSS.escape(id) + '"]')) {
               const skeleton = document.createElement("span");
@@ -1256,6 +1318,7 @@ export class BrowserController {
             }
           );
 
+          const blocksToSkeleton = [];
           while (walker.nextNode()) {
             const node = walker.currentNode;
             const parent = node.parentElement;
@@ -1270,7 +1333,10 @@ export class BrowserController {
             sourceTextMap.set(id, text);
             block.__mirrowOriginalText = text;
             items.push({ id, text });
+            blocksToSkeleton.push({ id, text, block });
+          }
 
+          for (const { id, text, block } of blocksToSkeleton) {
             forceSkeletonHost(block);
             if (!document.querySelector('[data-mirrow-skeleton-for="' + CSS.escape(id) + '"]')) {
               const skeleton = document.createElement("span");
@@ -1470,6 +1536,7 @@ export class BrowserController {
             }
           );
 
+          const blocksToSkeleton = [];
           while (walker.nextNode()) {
             const node = walker.currentNode;
             const parent = node.parentElement;
@@ -1484,7 +1551,10 @@ export class BrowserController {
             sourceTextMap.set(id, text);
             block.__mirrowOriginalText = text;
             items.push({ id, text });
+            blocksToSkeleton.push({ id, text, block });
+          }
 
+          for (const { id, text, block } of blocksToSkeleton) {
             forceSkeletonHost(block);
             if (!document.querySelector('[data-mirrow-skeleton-for="' + CSS.escape(id) + '"]')) {
               const skeleton = document.createElement("span");
@@ -1700,6 +1770,28 @@ function chunkItems<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
+function resolveBatchSize(settings: { translationEngine: string; batchSize: number }) {
+  if (settings.translationEngine === "local") {
+    return Math.max(LOCAL_MIN_BATCH_SIZE, settings.batchSize);
+  }
+  return settings.batchSize;
+}
+
+function resolveTranslationConcurrency(engine: string) {
+  if (engine === "local") return LOCAL_TRANSLATION_CONCURRENCY;
+  if (engine === "google") return GOOGLE_TRANSLATION_CONCURRENCY;
+  return ONLINE_TRANSLATION_CONCURRENCY;
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function readError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isNavigationAbortError(error: unknown) {
+  const message = readError(error);
+  return message.includes("ERR_ABORTED") || message.includes("(-3)");
 }

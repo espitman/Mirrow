@@ -22,7 +22,7 @@ export type TranslationBatchResult = {
 };
 
 export type AppSettings = {
-  translationEngine: "local" | "online";
+  translationEngine: "local" | "online" | "google";
   lmStudioBaseUrl: string;
   modelName: string;
   temperature: number;
@@ -31,6 +31,9 @@ export type AppSettings = {
   onlineBaseUrl: string;
   onlineModelName: string;
   onlineApiKey: string;
+  googleBaseUrl: string;
+  googleModelName: string;
+  googleApiKey: string;
 };
 
 export type HistoryItem = {
