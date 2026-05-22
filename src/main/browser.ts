@@ -455,6 +455,8 @@ export class BrowserController {
             "height:28px",
             "padding:0",
             "margin-inline-start:8px",
+            "float:inline-end",
+            "clear:inline-end",
             "border-radius:6px",
             "border:1px solid rgba(139,92,246,.5)",
             "background:rgba(139,92,246,.16)",
@@ -482,8 +484,13 @@ export class BrowserController {
             const skeleton = document.querySelector('[data-mirrow-skeleton-for="' + CSS.escape(item.id) + '"]');
             if (skeleton) skeleton.remove();
             if (/[\u0600-\u06FF]/.test(item.translation) && node.parentElement) {
+              const block = nearestTextBlock(node.parentElement);
               forcePersianTypography(node.parentElement);
-              forcePersianTypography(nearestTextBlock(node.parentElement));
+              forcePersianTypography(block);
+              block.classList.remove("mirrow-picked-preview", "mirrow-focus-target", "mirrow-pick-hover");
+              block.removeAttribute("data-mirrow-include");
+              node.parentElement.classList.remove("mirrow-picked-preview", "mirrow-focus-target", "mirrow-pick-hover");
+              node.parentElement.removeAttribute("data-mirrow-include");
               ensureRetranslateButton(node.parentElement, item.id);
             }
             count += 1;
@@ -713,9 +720,14 @@ export class BrowserController {
             const skeleton = document.createElement("span");
             skeleton.dataset.mirrowSkeletonFor = id;
             skeleton.className = "mirrow-text-skeleton";
+            skeleton.setAttribute("dir", "rtl");
             skeleton.textContent = " ";
             const width = Math.max(36, Math.min(420, text.trim().length * 7));
             skeleton.style.setProperty("--mirrow-skeleton-width", width + "px");
+            node.parentElement.setAttribute("dir", "rtl");
+            node.parentElement.style.setProperty("direction", "rtl", "important");
+            node.parentElement.style.setProperty("text-align", "right", "important");
+            node.parentElement.style.setProperty("unicode-bidi", "plaintext", "important");
             node.parentElement.insertBefore(skeleton, node.nextSibling);
             node.textContent = "";
           }
