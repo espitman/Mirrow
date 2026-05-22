@@ -156,7 +156,26 @@ export class BrowserController {
   async clearSelections() {
     const script = `
       (() => {
-        const nodes = document.querySelectorAll("[data-mirrow-include='true']");
+        const nodes = document.querySelectorAll("[data-mirrow-include='true'], .mirrow-picked-preview, .mirrow-focus-target, .mirrow-pick-hover");
+        for (const node of nodes) {
+          node.removeAttribute("data-mirrow-include");
+          node.classList.remove("mirrow-focus-target");
+          node.classList.remove("mirrow-picked-preview");
+          node.classList.remove("mirrow-pick-hover");
+          node.style.removeProperty("outline");
+          node.style.removeProperty("outline-offset");
+          node.style.removeProperty("box-shadow");
+        }
+        return nodes.length;
+      })();
+    `;
+    return (await this.view?.webContents.executeJavaScript(script, true)) ?? 0;
+  }
+
+  private async clearPickPreviews() {
+    const script = `
+      (() => {
+        const nodes = document.querySelectorAll("[data-mirrow-include='true'], .mirrow-picked-preview, .mirrow-focus-target, .mirrow-pick-hover");
         for (const node of nodes) {
           node.removeAttribute("data-mirrow-include");
           node.classList.remove("mirrow-focus-target");
@@ -246,6 +265,7 @@ export class BrowserController {
 
     const wasCancelled = this.translationCancelled;
     this.translationCancelled = false;
+    await this.clearPickPreviews();
 
     if (partialFailure && translatedCount === 0) {
       throw new Error("Translation failed before any text could be translated.");
@@ -334,8 +354,8 @@ export class BrowserController {
         }
 
         const items = [];
-        const nodeMap = new Map();
-        let counter = 0;
+        const nodeMap = window.__mirrowNodeMap instanceof Map ? window.__mirrowNodeMap : new Map();
+        let counter = nodeMap.size;
         const walker = document.createTreeWalker(
           document.body,
           NodeFilter.SHOW_TEXT,
@@ -349,6 +369,7 @@ export class BrowserController {
               const parent = node.parentElement;
               if (!parent) return NodeFilter.FILTER_REJECT;
               if (parent.closest("[data-mirrow-skip='true']")) return NodeFilter.FILTER_REJECT;
+              if (parent.closest("[data-mirrow-translated='true']")) return NodeFilter.FILTER_REJECT;
               if (shouldSkipElement(parent)) return NodeFilter.FILTER_REJECT;
               if (!isVisibleElement(parent)) return NodeFilter.FILTER_REJECT;
               return NodeFilter.FILTER_ACCEPT;
@@ -395,7 +416,8 @@ export class BrowserController {
           ".mirrow-pick-hover{background:rgba(56,189,248,.14)!important;box-shadow:inset 0 0 0 9999px rgba(56,189,248,.035)!important;transition:background .12s ease,box-shadow .12s ease!important;}",
           ".mirrow-picked-preview{background:rgba(34,197,94,.12)!important;box-shadow:inset 0 0 0 9999px rgba(34,197,94,.04)!important;transition:background .16s ease,box-shadow .16s ease!important;}",
           ".mirrow-excluded-preview{opacity:.34!important;filter:saturate(.45)!important;transition:opacity .16s ease,filter .16s ease!important;}",
-          ".mirrow-text-skeleton{display:inline-block!important;width:var(--mirrow-skeleton-width,120px)!important;height:1em!important;min-height:14px!important;border-radius:999px!important;background:linear-gradient(90deg,rgba(148,163,184,.18),rgba(148,163,184,.42),rgba(148,163,184,.18))!important;background-size:220% 100%!important;animation:mirrowSkeletonPulse 1.1s ease-in-out infinite!important;vertical-align:-.12em!important;}",
+          ".mirrow-skeleton-host{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;}",
+          ".mirrow-text-skeleton{display:block!important;width:var(--mirrow-skeleton-width,120px)!important;height:1em!important;min-height:14px!important;margin-left:auto!important;margin-right:0!important;border-radius:999px!important;background:linear-gradient(90deg,rgba(148,163,184,.18),rgba(148,163,184,.42),rgba(148,163,184,.18))!important;background-size:220% 100%!important;animation:mirrowSkeletonPulse 1.1s ease-in-out infinite!important;vertical-align:-.12em!important;}",
           "@keyframes mirrowSkeletonPulse{0%{background-position:220% 0}100%{background-position:-220% 0}}"
         ].join("\\n");
         const nodeMap = window.__mirrowNodeMap;
@@ -476,6 +498,15 @@ export class BrowserController {
           host.appendChild(button);
         }
 
+        function clearPickPreview(el) {
+          let current = el;
+          while (current && current !== document.body) {
+            current.classList.remove("mirrow-picked-preview", "mirrow-focus-target", "mirrow-pick-hover");
+            current.removeAttribute("data-mirrow-include");
+            current = current.parentElement;
+          }
+        }
+
         let count = 0;
         for (const item of translations) {
           const node = nodeMap.get(item.id);
@@ -483,14 +514,20 @@ export class BrowserController {
             node.textContent = item.translation;
             const skeleton = document.querySelector('[data-mirrow-skeleton-for="' + CSS.escape(item.id) + '"]');
             if (skeleton) skeleton.remove();
+            const block = node.parentElement ? nearestTextBlock(node.parentElement) : null;
+            if (node.parentElement) {
+              node.parentElement.dataset.mirrowTranslated = "true";
+              node.parentElement.classList.remove("mirrow-skeleton-host");
+            }
+            if (block) {
+              block.dataset.mirrowTranslated = "true";
+              block.classList.remove("mirrow-skeleton-host");
+            }
             if (/[\u0600-\u06FF]/.test(item.translation) && node.parentElement) {
-              const block = nearestTextBlock(node.parentElement);
               forcePersianTypography(node.parentElement);
               forcePersianTypography(block);
-              block.classList.remove("mirrow-picked-preview", "mirrow-focus-target", "mirrow-pick-hover");
-              block.removeAttribute("data-mirrow-include");
-              node.parentElement.classList.remove("mirrow-picked-preview", "mirrow-focus-target", "mirrow-pick-hover");
-              node.parentElement.removeAttribute("data-mirrow-include");
+              clearPickPreview(node.parentElement);
+              clearPickPreview(block);
               ensureRetranslateButton(node.parentElement, item.id);
             }
             count += 1;
@@ -608,7 +645,8 @@ export class BrowserController {
           ".mirrow-pick-hover{outline:2px solid #38bdf8!important;outline-offset:2px!important;background:rgba(56,189,248,.10)!important;}",
           ".mirrow-picked-preview{outline:2px solid #22c55e!important;outline-offset:2px!important;background:rgba(34,197,94,.12)!important;box-shadow:inset 0 0 0 9999px rgba(34,197,94,.04)!important;}",
           ".mirrow-excluded-preview{opacity:.34!important;filter:saturate(.45)!important;transition:opacity .16s ease,filter .16s ease!important;}",
-          ".mirrow-text-skeleton{display:inline-block!important;width:var(--mirrow-skeleton-width,120px)!important;height:1em!important;min-height:14px!important;border-radius:999px!important;background:linear-gradient(90deg,rgba(148,163,184,.18),rgba(148,163,184,.42),rgba(148,163,184,.18))!important;background-size:220% 100%!important;animation:mirrowSkeletonPulse 1.1s ease-in-out infinite!important;vertical-align:-.12em!important;}",
+          ".mirrow-skeleton-host{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;}",
+          ".mirrow-text-skeleton{display:block!important;width:var(--mirrow-skeleton-width,120px)!important;height:1em!important;min-height:14px!important;margin-left:auto!important;margin-right:0!important;border-radius:999px!important;background:linear-gradient(90deg,rgba(148,163,184,.18),rgba(148,163,184,.42),rgba(148,163,184,.18))!important;background-size:220% 100%!important;animation:mirrowSkeletonPulse 1.1s ease-in-out infinite!important;vertical-align:-.12em!important;}",
           "@keyframes mirrowSkeletonPulse{0%{background-position:220% 0}100%{background-position:-220% 0}}"
         ].join("\\n");
 
@@ -701,13 +739,39 @@ export class BrowserController {
           ".mirrow-pick-hover{background:rgba(56,189,248,.14)!important;box-shadow:inset 0 0 0 9999px rgba(56,189,248,.035)!important;transition:background .12s ease,box-shadow .12s ease!important;}",
           ".mirrow-picked-preview{background:rgba(34,197,94,.12)!important;box-shadow:inset 0 0 0 9999px rgba(34,197,94,.04)!important;transition:background .16s ease,box-shadow .16s ease!important;}",
           ".mirrow-excluded-preview{opacity:.34!important;filter:saturate(.45)!important;transition:opacity .16s ease,filter .16s ease!important;}",
-          ".mirrow-text-skeleton{display:inline-block!important;width:var(--mirrow-skeleton-width,120px)!important;height:1em!important;min-height:14px!important;border-radius:999px!important;background:linear-gradient(90deg,rgba(148,163,184,.18),rgba(148,163,184,.42),rgba(148,163,184,.18))!important;background-size:220% 100%!important;animation:mirrowSkeletonPulse 1.1s ease-in-out infinite!important;vertical-align:-.12em!important;}",
+          ".mirrow-skeleton-host{direction:rtl!important;text-align:right!important;unicode-bidi:plaintext!important;}",
+          ".mirrow-text-skeleton{display:block!important;width:var(--mirrow-skeleton-width,120px)!important;height:1em!important;min-height:14px!important;margin-left:auto!important;margin-right:0!important;border-radius:999px!important;background:linear-gradient(90deg,rgba(148,163,184,.18),rgba(148,163,184,.42),rgba(148,163,184,.18))!important;background-size:220% 100%!important;animation:mirrowSkeletonPulse 1.1s ease-in-out infinite!important;vertical-align:-.12em!important;}",
           "@keyframes mirrowSkeletonPulse{0%{background-position:220% 0}100%{background-position:-220% 0}}"
         ].join("\\n");
 
         document.querySelectorAll(".mirrow-dimmed").forEach((el) => el.classList.remove("mirrow-dimmed"));
 
         const itemIds = ${JSON.stringify(items.map((item) => item.id))};
+
+        function nearestTextBlock(el) {
+          let current = el;
+          while (current && current !== document.body) {
+            const style = window.getComputedStyle(current);
+            const tag = current.tagName.toLowerCase();
+            if (
+              ["p", "li", "article", "section", "header", "footer", "main", "aside", "nav", "blockquote", "figcaption", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tag) ||
+              ["block", "list-item", "table-cell", "flex", "grid"].includes(style.display)
+            ) {
+              return current;
+            }
+            current = current.parentElement;
+          }
+          return el;
+        }
+
+        function forceSkeletonHost(el) {
+          if (!el) return;
+          el.classList.add("mirrow-skeleton-host");
+          el.setAttribute("dir", "rtl");
+          el.style.setProperty("direction", "rtl", "important");
+          el.style.setProperty("text-align", "right", "important");
+          el.style.setProperty("unicode-bidi", "plaintext", "important");
+        }
 
         function addSkeletons() {
           const nodeMap = window.__mirrowNodeMap;
@@ -724,10 +788,9 @@ export class BrowserController {
             skeleton.textContent = " ";
             const width = Math.max(36, Math.min(420, text.trim().length * 7));
             skeleton.style.setProperty("--mirrow-skeleton-width", width + "px");
-            node.parentElement.setAttribute("dir", "rtl");
-            node.parentElement.style.setProperty("direction", "rtl", "important");
-            node.parentElement.style.setProperty("text-align", "right", "important");
-            node.parentElement.style.setProperty("unicode-bidi", "plaintext", "important");
+            const block = nearestTextBlock(node.parentElement);
+            forceSkeletonHost(node.parentElement);
+            forceSkeletonHost(block);
             node.parentElement.insertBefore(skeleton, node.nextSibling);
             node.textContent = "";
           }
