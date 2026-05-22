@@ -10,7 +10,7 @@ type TranslateControlsProps = {
   error: string | null;
   exclusionMode: boolean;
   selectionMode: boolean;
-  selectedOnly: boolean;
+  translationScope: "full" | "pick" | "exclude";
   onSourceLanguageChange: (value: string) => void;
   onTargetLanguageChange: (value: string) => void;
   onTranslate: () => void;
@@ -18,7 +18,7 @@ type TranslateControlsProps = {
   onClearExclusions: () => void;
   onToggleSelectionMode: () => void;
   onClearSelections: () => void;
-  onSelectedOnlyChange: (value: boolean) => void;
+  onFullPageMode: () => void;
 };
 
 export function TranslateControls({
@@ -29,7 +29,7 @@ export function TranslateControls({
   error,
   exclusionMode,
   selectionMode,
-  selectedOnly,
+  translationScope,
   onSourceLanguageChange,
   onTargetLanguageChange,
   onTranslate,
@@ -37,7 +37,7 @@ export function TranslateControls({
   onClearExclusions,
   onToggleSelectionMode,
   onClearSelections,
-  onSelectedOnlyChange,
+  onFullPageMode,
 }: TranslateControlsProps) {
   const percent = progress ? Math.round((progress.completed / Math.max(progress.total, 1)) * 100) : 0;
 
@@ -46,28 +46,28 @@ export function TranslateControls({
       <div className="flex items-center gap-3">
         <button className="primary-button" onClick={onTranslate} disabled={isTranslating}>
           <Languages size={17} />
-          {isTranslating ? "Translating" : "Translate Page"}
+          {isTranslating ? "Translating" : translationScope === "pick" ? "Translate Picked" : "Translate Page"}
         </button>
         <button
           type="button"
-          className={selectionMode ? "primary-button bg-emerald-500 hover:bg-emerald-500/90" : "secondary-button"}
+          className={translationScope === "full" ? "primary-button bg-slate-600 hover:bg-slate-600/90" : "secondary-button"}
+          onClick={onFullPageMode}
+          title="Translate the full page"
+        >
+          Full
+        </button>
+        <button
+          type="button"
+          className={translationScope === "pick" ? "primary-button bg-emerald-500 hover:bg-emerald-500/90" : "secondary-button"}
           onClick={onToggleSelectionMode}
           title="Click page elements to include them in selected-only translation"
         >
           <CheckSquare size={16} />
           {selectionMode ? "Picking" : "Pick"}
         </button>
-        <label className="flex h-10 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-xs text-slate-200">
-          <input
-            type="checkbox"
-            checked={selectedOnly}
-            onChange={(event) => onSelectedOnlyChange(event.target.checked)}
-          />
-          Only selected
-        </label>
         <button
           type="button"
-          className={exclusionMode ? "primary-button bg-rose-500 hover:bg-rose-500/90" : "secondary-button"}
+          className={translationScope === "exclude" ? "primary-button bg-rose-500 hover:bg-rose-500/90" : "secondary-button"}
           onClick={onToggleExclusionMode}
           title="Click page elements to exclude them from translation"
         >

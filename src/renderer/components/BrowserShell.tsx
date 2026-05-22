@@ -19,7 +19,7 @@ export function BrowserShell() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [exclusionMode, setExclusionMode] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedOnly, setSelectedOnly] = useState(false);
+  const [translationScope, setTranslationScope] = useState<"full" | "pick" | "exclude">("full");
   const [progress, setProgress] = useState<TranslationProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,7 +82,7 @@ export function BrowserShell() {
       window.mirrow.browser.setSelectionMode(false).then(() => setSelectionMode(false)).catch(() => undefined);
     }
     window.mirrow.translation
-      .start({ sourceLanguage, targetLanguage, selectedOnly })
+      .start({ sourceLanguage, targetLanguage, selectedOnly: translationScope === "pick" })
       .catch((nextError: Error) => setError(nextError.message))
       .finally(() => setIsTranslating(false));
   };
@@ -105,12 +105,13 @@ export function BrowserShell() {
         error={error}
         exclusionMode={exclusionMode}
         selectionMode={selectionMode}
-        selectedOnly={selectedOnly}
+        translationScope={translationScope}
         onSourceLanguageChange={setSourceLanguage}
         onTargetLanguageChange={setTargetLanguage}
         onTranslate={translate}
         onToggleExclusionMode={() => {
           const next = !exclusionMode;
+          setTranslationScope("exclude");
           window.mirrow.browser
             .setExclusionMode(next)
             .then((state) => {
@@ -127,6 +128,7 @@ export function BrowserShell() {
         }}
         onToggleSelectionMode={() => {
           const next = !selectionMode;
+          setTranslationScope("pick");
           window.mirrow.browser
             .setSelectionMode(next)
             .then((state) => {
@@ -141,7 +143,13 @@ export function BrowserShell() {
             .then((count) => setError(count ? `Cleared ${count} picked elements.` : null))
             .catch((nextError: Error) => setError(nextError.message));
         }}
-        onSelectedOnlyChange={setSelectedOnly}
+        onFullPageMode={() => {
+          setTranslationScope("full");
+          setSelectionMode(false);
+          setExclusionMode(false);
+          window.mirrow.browser.setSelectionMode(false).catch(() => undefined);
+          window.mirrow.browser.setExclusionMode(false).catch(() => undefined);
+        }}
       />
       <div className="relative min-h-0 flex-1 bg-[#f8fafc]" ref={viewportRef}>
         {!browserState.url && (
