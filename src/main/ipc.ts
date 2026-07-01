@@ -3,7 +3,7 @@ import type { AppSettings, BrowserBounds, HistoryItem, TranslationBatch, Transla
 import type { BrowserController } from "./browser.js";
 import { addHistory, clearHistory, getHistory } from "./history.js";
 import { getSettings, sanitizeSettings, updateSettings } from "./settings.js";
-import { checkLmStudioConnection, listGoogleAiModels, listLmStudioModels, translateBatch } from "./translator.js";
+import { checkLmStudioConnection, listGoogleAiModels, translateBatch } from "./translator.js";
 
 export function registerIpc(browser: BrowserController) {
   [
@@ -29,7 +29,6 @@ export function registerIpc(browser: BrowserController) {
     "history:add",
     "history:clear",
     "lmstudio:check-connection",
-    "lmstudio:list-models",
     "google-ai:list-models",
   ].forEach((channel) => ipcMain.removeHandler(channel));
 
@@ -68,7 +67,6 @@ export function registerIpc(browser: BrowserController) {
   ipcMain.handle("history:clear", () => clearHistory());
 
   ipcMain.handle("lmstudio:check-connection", async () => checkLmStudioConnection(await getSettings()));
-  ipcMain.handle("lmstudio:list-models", async () => listLmStudioModels(await getSettings()));
   ipcMain.handle("google-ai:list-models", async (_event, settings?: Partial<AppSettings>) => {
     return listGoogleAiModels(sanitizeSettings({ ...(await getSettings()), ...(settings ?? {}) }));
   });

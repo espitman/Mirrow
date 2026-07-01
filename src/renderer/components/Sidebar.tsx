@@ -1,8 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { BookOpenText, Clock3, Languages, MonitorCog, Settings, Sparkles } from "lucide-react";
-import { LIARA_MODEL_OPTIONS } from "../../shared/constants";
-import { useGoogleAiModelsQuery, useLmStudioModelsQuery, useLmStudioStatusQuery, useSettingsQuery, useUpdateSettingsMutation } from "../lib/hooks";
+import { BookOpenText, ChevronDown, Clock3, Languages, MonitorCog, Settings, Sparkles } from "lucide-react";
+import { LIARA_MODEL_OPTIONS, OPENROUTER_MODEL_OPTIONS } from "../../shared/constants";
+import { useGoogleAiModelsQuery, useLmStudioStatusQuery, useSettingsQuery, useUpdateSettingsMutation } from "../lib/hooks";
 import { StatusBadge } from "./StatusBadge";
 
 const navItems = [
@@ -12,13 +12,32 @@ const navItems = [
   { to: "/about", label: "About", icon: BookOpenText },
 ] as const;
 
+type TranslationEngine = "online" | "openrouter" | "local" | "google";
+const ENGINE_LABELS: Record<TranslationEngine, string> = {
+  online: "Liara",
+  openrouter: "OR",
+  google: "Google",
+  local: "Local",
+};
+
 export function Sidebar() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const settings = useSettingsQuery();
   const updateSettings = useUpdateSettingsMutation();
   const status = useLmStudioStatusQuery();
-  const localModels = useLmStudioModelsQuery();
-  const googleModels = useGoogleAiModelsQuery(settings.data ?? {}, Boolean(settings.data?.googleApiKey));
+  const selectedEngine = settings.data?.translationEngine ?? "online";
+  const enabledEngines = ([
+    ["online", settings.data?.onlineEnabled],
+    ["openrouter", settings.data?.openRouterEnabled],
+    ["google", settings.data?.googleEnabled],
+    ["local", settings.data?.localEnabled],
+  ] as Array<[TranslationEngine, boolean | undefined]>)
+    .filter(([, enabled]) => enabled !== false)
+    .map(([engine]) => engine);
+  const googleModels = useGoogleAiModelsQuery(
+    settings.data ?? {},
+    selectedEngine === "google" && settings.data?.googleEnabled !== false && Boolean(settings.data?.googleApiKey),
+  );
   const [onlineCost, setOnlineCost] = useState(0);
 
   useEffect(() => {
@@ -26,8 +45,8 @@ export function Sidebar() {
     return window.mirrow.onlineCost.onUpdate((state) => setOnlineCost(state.totalToman));
   }, []);
 
-  const selectedEngine = settings.data?.translationEngine ?? "online";
-  const setEngine = (translationEngine: "online" | "local" | "google") => {
+  const setEngine = (translationEngine: TranslationEngine) => {
+    if (!enabledEngines.includes(translationEngine)) return;
     updateSettings.mutate({ translationEngine });
   };
   const setModel = (model: string) => {
@@ -35,23 +54,29 @@ export function Sidebar() {
       updateSettings.mutate({ googleModelName: model });
       return;
     }
-    if (selectedEngine === "online") {
-      updateSettings.mutate({ onlineModelName: model });
+    if (selectedEngine === "openrouter") {
+      updateSettings.mutate({ openRouterModelName: model });
       return;
     }
-    updateSettings.mutate({ modelName: model });
+    if (selectedEngine === "online") {
+      updateSettings.mutate({ onlineModelName: model });
+    }
   };
   const engineModel =
     selectedEngine === "google"
       ? (settings.data?.googleModelName ?? "gemini-flash-latest")
+      : selectedEngine === "openrouter"
+        ? (settings.data?.openRouterModelName ?? "google/gemma-4-31b-it:free")
       : selectedEngine === "online"
         ? (settings.data?.onlineModelName ?? "openai/gpt-4.1-mini")
-        : (settings.data?.modelName ?? "translategemma-4b-it");
+        : "Local endpoint";
   const engineProvider =
     selectedEngine === "google"
       ? "Google AI Studio (Gemini)"
+      : selectedEngine === "openrouter"
+        ? "OpenRouter"
       : selectedEngine === "online"
-        ? "Liara (Online)"
+        ? "Liara"
         : "LM Studio (Local)";
   const modelOptions =
     selectedEngine === "google"
@@ -61,6 +86,13 @@ export function Sidebar() {
             .filter((model) => model.id !== engineModel)
             .map((model) => ({ label: model.name, value: model.id }))),
         ]
+      : selectedEngine === "openrouter"
+        ? [
+            ...(engineModel && !OPENROUTER_MODEL_OPTIONS.some((model) => model.value === engineModel)
+              ? [{ label: engineModel, value: engineModel }]
+              : []),
+            ...OPENROUTER_MODEL_OPTIONS,
+          ]
       : selectedEngine === "online"
         ? [
             ...(engineModel && !LIARA_MODEL_OPTIONS.some((model) => model.value === engineModel)
@@ -68,12 +100,7 @@ export function Sidebar() {
               : []),
             ...LIARA_MODEL_OPTIONS,
           ]
-        : [
-            ...(engineModel && !localModels.data?.some((model) => model.id === engineModel)
-              ? [{ label: engineModel, value: engineModel }]
-              : []),
-            ...((localModels.data ?? []).map((model) => ({ label: model.name, value: model.id }))),
-          ];
+        : [];
 
   return (
     <aside className="drag-region flex h-full w-[292px] shrink-0 flex-col border-r border-white/10 bg-black/20 px-4 pb-4 pt-12 backdrop-blur-xl">
@@ -122,46 +149,49 @@ export function Sidebar() {
               Change
             </Link>
           </div>
-          <label className="mt-3 block">
-            <span className="mb-1.5 block text-xs uppercase text-slate-500">Model</span>
-            <select
-              className="h-9 w-full rounded-lg border border-white/10 bg-black/20 px-2 text-xs text-white outline-none transition focus:border-violet/60"
-              value={engineModel}
-              onChange={(event) => setModel(event.target.value)}
-              disabled={updateSettings.isPending || !modelOptions.length}
-              title="Switch model"
-            >
-              {modelOptions.map((model) => (
-                <option key={model.value} value={model.value}>
-                  {model.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="mt-3 grid grid-cols-3 gap-1 rounded-lg bg-black/20 p-1 text-xs">
-            <button
-              className={`rounded-md px-2 py-1.5 transition ${selectedEngine === "online" ? "bg-violet text-white" : "text-slate-300 hover:bg-white/[0.08]"}`}
-              onClick={() => setEngine("online")}
-            >
-              Online
-            </button>
-            <button
-              className={`rounded-md px-2 py-1.5 transition ${selectedEngine === "google" ? "bg-violet text-white" : "text-slate-300 hover:bg-white/[0.08]"}`}
-              onClick={() => setEngine("google")}
-            >
-              Google
-            </button>
-            <button
-              className={`rounded-md px-2 py-1.5 transition ${selectedEngine === "local" ? "bg-violet text-white" : "text-slate-300 hover:bg-white/[0.08]"}`}
-              onClick={() => setEngine("local")}
-            >
-              Local
-            </button>
+          <div className={`mt-3 grid gap-1 rounded-lg bg-black/20 p-1 text-xs ${enabledEngines.length >= 4 ? "grid-cols-4" : enabledEngines.length === 3 ? "grid-cols-3" : enabledEngines.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+            {enabledEngines.map((engine) => (
+              <button
+                key={engine}
+                className={`rounded-md px-2 py-1.5 transition ${selectedEngine === engine ? "bg-violet text-white" : "text-slate-300 hover:bg-white/[0.08]"}`}
+                onClick={() => setEngine(engine)}
+              >
+                {ENGINE_LABELS[engine]}
+              </button>
+            ))}
           </div>
-          {(selectedEngine === "online" || selectedEngine === "google") && (
+          {selectedEngine === "local" ? (
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-2 py-2">
+              <div className="text-xs uppercase text-slate-500">URL</div>
+              <div className="mt-1 truncate text-xs text-slate-200">{settings.data?.lmStudioBaseUrl}</div>
+            </div>
+          ) : (
+            <label className="mt-3 block">
+              <span className="mb-1.5 block text-xs uppercase text-slate-500">Model</span>
+              <div className="relative">
+                <select
+                  className="h-9 w-full appearance-none rounded-lg border border-white/10 bg-black/20 px-2 pr-10 text-xs text-white outline-none transition focus:border-violet/60"
+                  value={engineModel}
+                  onChange={(event) => setModel(event.target.value)}
+                  disabled={updateSettings.isPending || !modelOptions.length}
+                  title="Switch model"
+                >
+                  {modelOptions.map((model) => (
+                    <option key={model.value} value={model.value}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-200" size={16} />
+              </div>
+            </label>
+          )}
+          {(selectedEngine === "online" || selectedEngine === "google" || selectedEngine === "openrouter") && (
             <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs uppercase text-slate-500">{selectedEngine === "google" ? "Google cost" : "Online cost"}</span>
+                <span className="text-xs uppercase text-slate-500">
+                  {selectedEngine === "google" ? "Google cost" : selectedEngine === "openrouter" ? "OpenRouter cost" : "Liara cost"}
+                </span>
                 <button
                   className="text-xs text-slate-400 hover:text-white"
                   onClick={() => window.mirrow.onlineCost.reset().then((state) => setOnlineCost(state.totalToman))}

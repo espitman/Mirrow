@@ -55,7 +55,6 @@ contextBridge.exposeInMainWorld("mirrow", {
   },
   lmStudio: {
     checkConnection: () => ipcRenderer.invoke("lmstudio:check-connection"),
-    listModels: () => ipcRenderer.invoke("lmstudio:list-models") as Promise<LmStudioModel[]>,
   },
   googleAi: {
     listModels: (settings?: Partial<AppSettings>) => ipcRenderer.invoke("google-ai:list-models", settings) as Promise<LmStudioModel[]>,

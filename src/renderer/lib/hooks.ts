@@ -28,14 +28,6 @@ export function useLmStudioStatusQuery() {
   });
 }
 
-export function useLmStudioModelsQuery() {
-  return useQuery({
-    queryKey: ["lmstudio-models"],
-    queryFn: () => window.mirrow.lmStudio.listModels(),
-    refetchInterval: 10_000,
-  });
-}
-
 export function useGoogleAiModelsQuery(settings: Partial<AppSettings>, enabled: boolean) {
   return useQuery({
     queryKey: ["google-ai-models"],

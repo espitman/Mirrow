@@ -19,7 +19,7 @@ export function AboutPage() {
             ["Routing", "TanStack Router"],
             ["Async state", "TanStack Query"],
             ["Default online model", "openai/gpt-4.1-mini"],
-            ["Default local model", "translategemma-4b-it"],
+            ["Default local endpoint", "http://localhost:1234/v1/chat/completions"],
             ["Default target", "Persian"],
           ].map(([label, value]) => (
             <div key={label} className="rounded-lg border border-white/10 bg-white/[0.04] p-4">

@@ -11,6 +11,10 @@ export async function checkLmStudioConnection(settings: AppSettings): Promise<Lm
     return checkGoogleConnection(settings);
   }
 
+  if (settings.translationEngine === "openrouter") {
+    return checkOpenRouterConnection(settings);
+  }
+
   if (settings.translationEngine === "online") {
     return checkOnlineConnection(settings);
   }
@@ -20,7 +24,6 @@ export async function checkLmStudioConnection(settings: AppSettings): Promise<Lm
       method: "POST",
       headers: await requestHeaders(settings),
       body: JSON.stringify({
-        model: resolveModelName(settings),
         temperature: 0,
         messages: [
           { role: "system", content: "Return only valid JSON." },
@@ -38,26 +41,9 @@ export async function checkLmStudioConnection(settings: AppSettings): Promise<Lm
   } catch {
     return {
       connected: false,
-      message: "LM Studio is offline. Please start LM Studio and load the translategemma-4b-it model.",
+      message: "Local model server is offline. Please start the local endpoint.",
     };
   }
-}
-
-export async function listLmStudioModels(settings: AppSettings): Promise<LmStudioModel[]> {
-  const response = await fetch(resolveModelsUrl(settings.lmStudioBaseUrl), {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-  });
-
-  if (!response.ok) {
-    throw new Error(`LM Studio returned ${response.status}`);
-  }
-
-  const data = (await response.json()) as { data?: Array<{ id?: string; object?: string }> };
-  return (data.data ?? [])
-    .map((model) => String(model.id || "").trim())
-    .filter(Boolean)
-    .map((id) => ({ id, name: id }));
 }
 
 export async function listGoogleAiModels(settings: AppSettings): Promise<LmStudioModel[]> {
@@ -101,12 +87,12 @@ export async function translateBatch(
         method: "POST",
         headers: await requestHeaders(settings),
         body: JSON.stringify({
-          model: resolveModelName(settings),
           temperature: settings.temperature,
           messages: [
             { role: "system", content: TRANSLATION_SYSTEM_PROMPT },
             { role: "user", content: JSON.stringify(batch) },
           ],
+          ...(usesOpenAiCompatibleModel(settings) ? { model: resolveModelName(settings) } : {}),
         }),
       });
 
@@ -116,7 +102,7 @@ export async function translateBatch(
 
       const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
       content = data?.choices?.[0]?.message?.content;
-      costToman = settings.translationEngine === "online" ? extractProviderCostToman(data) : undefined;
+      costToman = usesMeteredOnlineProvider(settings) ? extractProviderCostToman(data) : undefined;
     }
   } catch (error) {
     if (settings.translationEngine === "google") {
@@ -319,7 +305,6 @@ async function repairTranslationJson(
     method: "POST",
     headers: await requestHeaders(settings),
     body: JSON.stringify({
-      model: resolveModelName(settings),
       temperature: 0,
       messages: [
         {
@@ -335,6 +320,7 @@ async function repairTranslationJson(
           }),
         },
       ],
+      ...(usesOpenAiCompatibleModel(settings) ? { model: resolveModelName(settings) } : {}),
     }),
   });
 
@@ -375,7 +361,6 @@ async function translateItemsIndividually(
       method: "POST",
       headers: await requestHeaders(settings),
       body: JSON.stringify({
-        model: resolveModelName(settings),
         temperature: settings.temperature,
         messages: [
           {
@@ -388,6 +373,7 @@ async function translateItemsIndividually(
             content: item.text,
           },
         ],
+        ...(usesOpenAiCompatibleModel(settings) ? { model: resolveModelName(settings) } : {}),
       }),
     });
 
@@ -396,7 +382,7 @@ async function translateItemsIndividually(
     }
 
     const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    const costToman = settings.translationEngine === "online" ? extractProviderCostToman(data) : undefined;
+    const costToman = usesMeteredOnlineProvider(settings) ? extractProviderCostToman(data) : undefined;
     if (Number.isFinite(costToman)) totalCostToman += costToman ?? 0;
     const raw = data?.choices?.[0]?.message?.content;
     items.push({
@@ -425,6 +411,23 @@ async function checkOnlineConnection(settings: AppSettings): Promise<LmStudioSta
   }
 }
 
+async function checkOpenRouterConnection(settings: AppSettings): Promise<LmStudioStatus> {
+  try {
+    const response = await fetch(resolveEndpoint(settings.openRouterBaseUrl, "/models"), {
+      method: "GET",
+      headers: await requestHeaders(settings),
+    });
+
+    if (!response.ok) {
+      return { connected: false, message: `OpenRouter returned ${response.status}` };
+    }
+
+    return { connected: true, message: "Connected to OpenRouter" };
+  } catch {
+    return { connected: false, message: "OpenRouter is unavailable or the API key/model is invalid." };
+  }
+}
+
 async function checkGoogleConnection(settings: AppSettings): Promise<LmStudioStatus> {
   try {
     const response = await fetch(resolveGoogleModelsUrl(settings), {
@@ -443,11 +446,21 @@ async function checkGoogleConnection(settings: AppSettings): Promise<LmStudioSta
 }
 
 function resolveChatCompletionsUrl(settings: AppSettings) {
+  if (settings.translationEngine === "openrouter") {
+    return resolveEndpoint(settings.openRouterBaseUrl, "/chat/completions");
+  }
+
   if (settings.translationEngine === "online") {
     return resolveEndpoint(settings.onlineBaseUrl, "/chat/completions");
   }
 
-  return settings.lmStudioBaseUrl;
+  return resolveLocalEndpoint(settings.lmStudioBaseUrl);
+}
+
+function resolveLocalEndpoint(baseUrl: string) {
+  const normalized = (baseUrl || "").trim().replace(/\/+$/, "");
+  if (normalized.endsWith("/chat/completions")) return normalized;
+  return `${normalized}/v1/chat/completions`;
 }
 
 function resolveGoogleGenerateContentUrl(settings: AppSettings) {
@@ -465,16 +478,6 @@ function resolveGoogleEndpoint(settings: AppSettings, path: string) {
   return `${normalized}${path}`;
 }
 
-function resolveModelsUrl(baseUrl: string) {
-  const normalized = (baseUrl || "").trim().replace(/\/+$/, "");
-  if (normalized.endsWith("/models")) return normalized;
-  if (normalized.endsWith("/chat/completions")) {
-    return `${normalized.slice(0, -"/chat/completions".length)}/models`;
-  }
-  if (normalized.endsWith("/v1")) return `${normalized}/models`;
-  return `${normalized}/v1/models`;
-}
-
 function resolveEndpoint(baseUrl: string, path: string) {
   const normalized = (baseUrl || "").trim().replace(/\/+$/, "");
   if (normalized.endsWith(path)) return normalized;
@@ -482,7 +485,16 @@ function resolveEndpoint(baseUrl: string, path: string) {
 }
 
 function resolveModelName(settings: AppSettings) {
-  return settings.translationEngine === "online" ? settings.onlineModelName : settings.modelName;
+  if (settings.translationEngine === "openrouter") return settings.openRouterModelName;
+  return settings.onlineModelName;
+}
+
+function usesOpenAiCompatibleModel(settings: AppSettings) {
+  return settings.translationEngine === "online" || settings.translationEngine === "openrouter";
+}
+
+function usesMeteredOnlineProvider(settings: AppSettings) {
+  return settings.translationEngine === "online" || settings.translationEngine === "openrouter";
 }
 
 async function fetchWithRetry(input: string, init: RequestInit, attempts = GOOGLE_RETRY_ATTEMPTS) {
@@ -518,6 +530,12 @@ async function requestHeaders(settings: AppSettings) {
     const apiKey = await resolveOnlineApiKey(settings);
     if (!apiKey) throw new Error("Add the Liara/OpenAI-compatible API key in Settings.");
     headers.Authorization = `Bearer ${apiKey}`;
+  }
+  if (settings.translationEngine === "openrouter") {
+    const apiKey = await resolveOpenRouterApiKey(settings);
+    if (!apiKey) throw new Error("Add the OpenRouter API key in Settings.");
+    headers.Authorization = bearerToken(apiKey);
+    headers["X-OpenRouter-Title"] = "Mirrow";
   }
   return headers;
 }
@@ -593,6 +611,62 @@ async function resolveOnlineApiKey(settings: AppSettings) {
   }
 }
 
+async function resolveOpenRouterApiKey(settings: AppSettings) {
+  const configured = settings.openRouterApiKey.trim();
+  if (configured) return configured;
+
+  const envKey = process.env.OPENROUTER_API_KEY?.trim() || process.env.OPEN_ROUTER_API_KEY?.trim();
+  if (envKey) return envKey;
+
+  if (process.platform !== "darwin") return "";
+
+  const userDefaultsKey = await readTextLensOpenRouterApiKey();
+  if (userDefaultsKey) return userDefaultsKey;
+
+  return readMacKeychainPassword([
+    ["find-generic-password", "-s", "openrouter", "-w"],
+    ["find-generic-password", "-s", "OPENROUTER_API_KEY", "-w"],
+    ["find-generic-password", "-s", "com.openrouter.api-key", "-w"],
+    ["find-generic-password", "-s", "com.espitman.Mirook", "-a", "openrouter-api-key", "-w"],
+  ]);
+}
+
+async function readTextLensOpenRouterApiKey() {
+  try {
+    const { stdout } = await execFileAsync("defaults", ["read", "com.textlens.app", "translation.openRouter.apiKey"]);
+    const directValue = stdout.trim();
+    if (directValue) return directValue;
+  } catch {
+    // Fall back to scanning all defaults for older TextLens builds.
+  }
+
+  try {
+    const { stdout } = await execFileAsync("defaults", ["read"]);
+    const match = stdout.match(/"translation\.openRouter\.apiKey"\s*=\s*"([^"]+)"/);
+    return match?.[1]?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+async function readMacKeychainPassword(commands: string[][]) {
+  for (const args of commands) {
+    try {
+      const { stdout } = await execFileAsync("security", args);
+      const value = stdout.trim();
+      if (value) return value;
+    } catch {
+      // Try the next known key name.
+    }
+  }
+
+  return "";
+}
+
+function bearerToken(apiKey: string) {
+  return apiKey.match(/^Bearer\s+/i) ? apiKey : `Bearer ${apiKey}`;
+}
+
 function cleanPlainTranslation(raw: string) {
   return raw
     .trim()
@@ -605,14 +679,16 @@ function cleanPlainTranslation(raw: string) {
 
 function providerLabel(settings: AppSettings) {
   if (settings.translationEngine === "google") return "Google AI Studio";
+  if (settings.translationEngine === "openrouter") return "OpenRouter";
   if (settings.translationEngine === "online") return "Online provider";
   return "LM Studio";
 }
 
 function providerUnavailableMessage(settings: AppSettings) {
   if (settings.translationEngine === "google") return "Google AI Studio is unavailable or the API key/model is invalid.";
+  if (settings.translationEngine === "openrouter") return "OpenRouter is unavailable or the API key/model is invalid.";
   if (settings.translationEngine === "online") return "Online translation provider is unavailable.";
-  return "LM Studio is offline. Please start LM Studio and load the translategemma-4b-it model.";
+  return "Local model server is offline. Please start the local endpoint.";
 }
 
 function readError(error: unknown) {

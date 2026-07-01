@@ -22,15 +22,21 @@ export type TranslationBatchResult = {
 };
 
 export type AppSettings = {
-  translationEngine: "local" | "online" | "google";
+  translationEngine: "local" | "online" | "google" | "openrouter";
+  onlineEnabled: boolean;
+  openRouterEnabled: boolean;
+  googleEnabled: boolean;
+  localEnabled: boolean;
   lmStudioBaseUrl: string;
-  modelName: string;
   temperature: number;
   batchSize: number;
   defaultTargetLanguage: string;
   onlineBaseUrl: string;
   onlineModelName: string;
   onlineApiKey: string;
+  openRouterBaseUrl: string;
+  openRouterModelName: string;
+  openRouterApiKey: string;
   googleBaseUrl: string;
   googleModelName: string;
   googleApiKey: string;

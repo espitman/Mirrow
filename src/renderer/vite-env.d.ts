@@ -53,7 +53,6 @@ declare global {
       };
       lmStudio: {
         checkConnection: () => Promise<LmStudioStatus>;
-        listModels: () => Promise<LmStudioModel[]>;
       };
       googleAi: {
         listModels: (settings?: Partial<AppSettings>) => Promise<LmStudioModel[]>;
