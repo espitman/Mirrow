@@ -10,6 +10,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { DEFAULT_SETTINGS, LIARA_MODEL_OPTIONS, OPENROUTER_MODEL_OPTIONS } from "../../shared/constants";
 
 type SettingsTab = "engine" | "providers" | "general";
+type ThemeSource = "system" | "light" | "dark";
 type TranslationEngine = "local" | "online" | "google" | "openrouter";
 type EnabledKey = "onlineEnabled" | "openRouterEnabled" | "googleEnabled" | "localEnabled";
 const ENGINE_OPTIONS: Array<{ value: TranslationEngine; label: string }> = [
@@ -59,6 +60,7 @@ export function SettingsPage() {
   const status = useLmStudioStatusQuery();
   const [activeTab, setActiveTab] = useState<SettingsTab>("engine");
   const [form, setForm] = useState({
+    themeSource: "dark" as ThemeSource,
     translationEngine: "online" as TranslationEngine,
     onlineEnabled: true,
     openRouterEnabled: true,
@@ -447,38 +449,58 @@ export function SettingsPage() {
         )}
 
         {activeTab === "general" && (
-          <div className="grid grid-cols-3 gap-4">
-            <label className="block">
-              <span className="mb-2 block text-sm text-[#bdc1c6]">Temperature</span>
-              <input
-                className="field"
-                type="number"
-                min="0"
-                max="2"
-                step="0.1"
-                value={form.temperature}
-                onChange={(event) => setForm((current) => ({ ...current, temperature: Number(event.target.value) }))}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-2 block text-sm text-[#bdc1c6]">Batch size</span>
-              <input
-                className="field"
-                type="number"
-                min="1"
-                max="80"
-                value={form.batchSize}
-                onChange={(event) => setForm((current) => ({ ...current, batchSize: Number(event.target.value) }))}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-2 block text-sm text-[#bdc1c6]">Default target</span>
-              <input
-                className="field"
-                value={form.defaultTargetLanguage}
-                onChange={(event) => setForm((current) => ({ ...current, defaultTargetLanguage: event.target.value }))}
-              />
-            </label>
+          <div className="grid gap-5">
+            <section className="rounded-xl border border-[#3c4043] bg-[#202124] p-4">
+              <div className="mb-3 text-sm font-medium text-[#e8eaed]">Theme</div>
+              <div className="grid grid-cols-3 gap-1 rounded-full bg-[#292a2d] p-1 text-sm text-[#bdc1c6]">
+                {(["system", "light", "dark"] as const).map((themeSource) => (
+                  <button
+                    key={themeSource}
+                    type="button"
+                    className={`rounded-full px-3 py-2 capitalize transition ${
+                      form.themeSource === themeSource ? "bg-[#8ab4f8] text-[#202124]" : "hover:bg-white/[0.08]"
+                    }`}
+                    onClick={() => setForm((current) => ({ ...current, themeSource }))}
+                  >
+                    {themeSource}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <div className="grid grid-cols-3 gap-4">
+              <label className="block">
+                <span className="mb-2 block text-sm text-[#bdc1c6]">Temperature</span>
+                <input
+                  className="field"
+                  type="number"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value={form.temperature}
+                  onChange={(event) => setForm((current) => ({ ...current, temperature: Number(event.target.value) }))}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm text-[#bdc1c6]">Batch size</span>
+                <input
+                  className="field"
+                  type="number"
+                  min="1"
+                  max="80"
+                  value={form.batchSize}
+                  onChange={(event) => setForm((current) => ({ ...current, batchSize: Number(event.target.value) }))}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm text-[#bdc1c6]">Default target</span>
+                <input
+                  className="field"
+                  value={form.defaultTargetLanguage}
+                  onChange={(event) => setForm((current) => ({ ...current, defaultTargetLanguage: event.target.value }))}
+                />
+              </label>
+            </div>
           </div>
         )}
 

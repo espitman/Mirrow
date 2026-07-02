@@ -4,6 +4,7 @@ import { readJsonFile, writeJsonFile } from "./storage.js";
 
 const SETTINGS_FILE = "settings.json";
 const TRANSLATION_ENGINES = ["online", "openrouter", "google", "local"] as const;
+const THEME_SOURCES = ["system", "light", "dark"] as const;
 
 export async function getSettings(): Promise<AppSettings> {
   const stored = await readJsonFile<Partial<AppSettings>>(SETTINGS_FILE, {});
@@ -24,6 +25,7 @@ export function sanitizeSettings(settings: AppSettings): AppSettings {
   const translationEngine = isProviderEnabled(requestedEngine, enabled) ? requestedEngine : firstEnabledProvider(enabled);
 
   return {
+    themeSource: THEME_SOURCES.includes(settings.themeSource) ? settings.themeSource : DEFAULT_SETTINGS.themeSource,
     translationEngine,
     ...enabled,
     lmStudioBaseUrl: String(settings.lmStudioBaseUrl || DEFAULT_SETTINGS.lmStudioBaseUrl),

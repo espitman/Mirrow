@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { BrowserState, TranslationProgress } from "../../shared/types";
 import { BrowserToolbar } from "./BrowserToolbar";
+import { Sidebar } from "./Sidebar";
 import { TranslateControls } from "./TranslateControls";
 
 const INITIAL_BROWSER_STATE: BrowserState = {
@@ -14,6 +16,7 @@ const INITIAL_BROWSER_STATE: BrowserState = {
 };
 
 export function BrowserShell() {
+  const queryClient = useQueryClient();
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [browserState, setBrowserState] = useState(INITIAL_BROWSER_STATE);
   const [sourceLanguage, setSourceLanguage] = useState("auto");
@@ -60,6 +63,7 @@ export function BrowserShell() {
     const offComplete = window.mirrow.translation.onComplete((payload) => {
       setProgress({ completed: payload.total, total: payload.total, message: `Translated ${payload.translatedCount} / ${payload.total} text nodes` });
       setIsTranslating(false);
+      queryClient.invalidateQueries({ queryKey: ["history"] }).catch(() => undefined);
     });
     return () => {
       offState();
@@ -67,7 +71,7 @@ export function BrowserShell() {
       offError();
       offComplete();
     };
-  }, []);
+  }, [queryClient]);
 
   const loadUrl = async (url: string) => {
     setError(null);
@@ -128,41 +132,46 @@ export function BrowserShell() {
           if (lastNavigationInput) void loadUrl(lastNavigationInput);
         }}
       />
-      <TranslateControls
-        sourceLanguage={sourceLanguage}
-        targetLanguage={targetLanguage}
-        isTranslating={isTranslating}
-        progress={progress}
-        error={error}
-        instantTranslateMode={instantTranslateMode}
-        onSourceLanguageChange={setSourceLanguage}
-        onTargetLanguageChange={setTargetLanguage}
-        onTranslate={translate}
-        onCancel={() => {
-          window.mirrow.translation.cancel().catch((nextError: Error) => setError(nextError.message));
-          setIsTranslating(false);
-        }}
-        onToggleInstantTranslateMode={() => {
-          const next = !instantTranslateMode;
-          setInstantTranslateMode(next);
-          window.mirrow.browser
-            .setInstantTranslateMode(next)
-            .then((state) => setInstantTranslateMode(state.enabled))
-            .catch((nextError: Error) => {
-              setInstantTranslateMode(!next);
-              setError(nextError.message);
-            });
-        }}
-      />
-      <div className="relative min-h-0 flex-1 bg-[#202124]" ref={viewportRef}>
-        {!browserState.url && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#202124] text-center">
-            <div>
-              <div className="text-2xl font-semibold text-[#e8eaed]">Mirrow is ready</div>
-              <div className="mt-2 text-sm text-[#9aa0a6]">Search Google or enter a URL.</div>
-            </div>
+      <div className="flex min-h-0 flex-1">
+        <Sidebar underTopBar />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <TranslateControls
+            sourceLanguage={sourceLanguage}
+            targetLanguage={targetLanguage}
+            isTranslating={isTranslating}
+            progress={progress}
+            error={error}
+            instantTranslateMode={instantTranslateMode}
+            onSourceLanguageChange={setSourceLanguage}
+            onTargetLanguageChange={setTargetLanguage}
+            onTranslate={translate}
+            onCancel={() => {
+              window.mirrow.translation.cancel().catch((nextError: Error) => setError(nextError.message));
+              setIsTranslating(false);
+            }}
+            onToggleInstantTranslateMode={() => {
+              const next = !instantTranslateMode;
+              setInstantTranslateMode(next);
+              window.mirrow.browser
+                .setInstantTranslateMode(next)
+                .then((state) => setInstantTranslateMode(state.enabled))
+                .catch((nextError: Error) => {
+                  setInstantTranslateMode(!next);
+                  setError(nextError.message);
+                });
+            }}
+          />
+          <div className="relative min-h-0 flex-1 bg-[#202124]" ref={viewportRef}>
+            {!browserState.url && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#202124] text-center">
+                <div>
+                  <div className="text-2xl font-semibold text-[#e8eaed]">Mirrow is ready</div>
+                  <div className="mt-2 text-sm text-[#9aa0a6]">Search Google or enter a URL.</div>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

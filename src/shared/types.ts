@@ -22,6 +22,7 @@ export type TranslationBatchResult = {
 };
 
 export type AppSettings = {
+  themeSource: "system" | "light" | "dark";
   translationEngine: "local" | "online" | "google" | "openrouter";
   onlineEnabled: boolean;
   openRouterEnabled: boolean;

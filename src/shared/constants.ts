@@ -1,6 +1,7 @@
 import type { AppSettings } from "./types.js";
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  themeSource: "dark",
   translationEngine: "online",
   onlineEnabled: true,
   openRouterEnabled: true,

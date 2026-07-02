@@ -5,8 +5,8 @@ export function HistoryPage() {
   const history = useHistoryQuery();
   const clearHistory = useClearHistoryMutation();
 
-  const openUrl = (url: string) => {
-    window.mirrow.browser.loadUrl(url).catch(() => undefined);
+  const openUrlInNewTab = (url: string) => {
+    window.mirrow.browser.createTab(url).catch(() => undefined);
   };
 
   return (
@@ -33,14 +33,25 @@ export function HistoryPage() {
         ) : (
           <div className="divide-y divide-[#3c4043]">
             {history.data.map((item) => (
-              <article key={item.id} className="flex items-center gap-4 px-5 py-4">
+              <article
+                key={item.id}
+                className="flex cursor-default items-center gap-4 px-5 py-4 transition hover:bg-white/[0.04]"
+                onClick={() => openUrlInNewTab(item.url)}
+              >
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-[#e8eaed]">{item.title || item.url}</div>
                   <div className="mt-1 truncate text-xs text-[#9aa0a6]">{item.url}</div>
                 </div>
                 <div className="w-28 text-sm text-[#bdc1c6]">{item.targetLanguage}</div>
                 <div className="w-44 text-xs text-[#9aa0a6]">{new Date(item.translatedAt).toLocaleString()}</div>
-                <button className="icon-button" onClick={() => openUrl(item.url)} title="Open again">
+                <button
+                  className="icon-button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openUrlInNewTab(item.url);
+                  }}
+                  title="Open in new tab"
+                >
                   <ExternalLink size={16} />
                 </button>
               </article>

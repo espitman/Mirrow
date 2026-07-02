@@ -1,4 +1,4 @@
-import { createRootRoute, createRoute, createRouter, Navigate, Outlet } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, Navigate, Outlet, useRouterState } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/router-devtools";
 import { Sidebar } from "./components/Sidebar";
 import { AboutPage } from "./routes/about";
@@ -7,18 +7,29 @@ import { SettingsPage } from "./routes/settings";
 import { TranslatePage } from "./routes/translate";
 
 const rootRoute = createRootRoute({
-  component: () => (
+  component: RootLayout,
+});
+
+function RootLayout() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const isTranslateRoute = pathname === "/translate";
+
+  return (
     <div className="h-screen overflow-hidden bg-[#202124] text-[#e8eaed]">
-      <div className="flex h-full">
-        <Sidebar />
-        <main className="min-w-0 flex-1 overflow-hidden">
-          <Outlet />
-        </main>
-      </div>
+      {isTranslateRoute ? (
+        <Outlet />
+      ) : (
+        <div className="flex h-full">
+          <Sidebar />
+          <main className="min-w-0 flex-1 overflow-hidden">
+            <Outlet />
+          </main>
+        </div>
+      )}
       <TanStackRouterDevtools position="bottom-right" />
     </div>
-  ),
-});
+  );
+}
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,

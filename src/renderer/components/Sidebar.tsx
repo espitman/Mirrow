@@ -30,7 +30,11 @@ const ENGINE_LABELS: Record<TranslationEngine, string> = {
   local: "Local",
 };
 
-export function Sidebar() {
+type SidebarProps = {
+  underTopBar?: boolean;
+};
+
+export function Sidebar({ underTopBar = false }: SidebarProps) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const settings = useSettingsQuery();
   const updateSettings = useUpdateSettingsMutation();
@@ -119,9 +123,9 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`drag-region flex h-full shrink-0 flex-col border-r border-[#3c4043] bg-[#202124] pb-4 pt-12 transition-[width,padding] duration-200 ${
+      className={`drag-region flex h-full shrink-0 flex-col border-r border-[#3c4043] bg-[#202124] pb-4 transition-[width,padding] duration-200 ${
         collapsed ? "w-[80px] px-3" : "w-[292px] px-4"
-      }`}
+      } ${underTopBar ? "pt-4" : "pt-12"}`}
     >
       <div className={`no-drag mb-7 flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#8ab4f8] text-[#202124]">
@@ -249,19 +253,6 @@ export function Sidebar() {
           )}
             </section>
 
-            <section className="rounded-xl border border-[#3c4043] bg-[#292a2d] p-4">
-              <div className="mb-3 text-xs uppercase text-[#9aa0a6]">Theme</div>
-              <div className="grid grid-cols-3 gap-1 rounded-full bg-[#202124] p-1 text-xs text-[#bdc1c6]">
-                <button className="rounded-md px-2 py-1.5 hover:bg-white/[0.08]">System</button>
-                <button className="rounded-md px-2 py-1.5 hover:bg-white/[0.08]">Light</button>
-                <button className="rounded-full bg-[#3c4043] px-2 py-1.5 text-[#e8eaed]">Dark</button>
-              </div>
-            </section>
-          </div>
-
-          <div className="mt-auto rounded-xl border border-[#3c4043] bg-[#292a2d] p-4">
-            <div className="text-sm font-semibold text-[#e8eaed]">Mirrow</div>
-            <div className="mt-1 text-xs leading-5 text-[#9aa0a6]">See the world in your language.</div>
           </div>
         </div>
       )}

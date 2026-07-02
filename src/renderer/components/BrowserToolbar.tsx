@@ -252,7 +252,7 @@ export function BrowserToolbar({
 
   return (
     <div className="relative border-b border-[#3c4043] bg-[#202124] text-[#e8eaed]">
-      <div className="drag-region flex h-10 items-end gap-1 overflow-hidden px-3 pt-2">
+      <div className="drag-region flex h-10 items-end gap-1 overflow-hidden pl-[116px] pr-3 pt-2">
         <div className="no-drag flex min-w-0 flex-1 items-end gap-1 overflow-hidden">
           {tabs.map((tab) => {
             const active = tab.id === state.activeTabId;
@@ -261,7 +261,7 @@ export function BrowserToolbar({
                 key={tab.id}
                 type="button"
                 draggable={tab.id !== "__active__"}
-                className={`group flex h-8 min-w-[48px] max-w-[220px] flex-[1_1_220px] cursor-grab items-center gap-1 overflow-hidden rounded-t-xl pl-2 pr-1 text-left text-xs transition active:cursor-grabbing ${
+                className={`group flex h-8 min-w-[48px] max-w-[220px] flex-[1_1_220px] items-center gap-1 overflow-hidden rounded-t-xl pl-2 pr-1 text-left text-xs transition ${
                   active ? "bg-[#2b2c30] text-[#e8eaed]" : "bg-transparent text-[#bdc1c6] hover:bg-white/[0.06]"
                 } ${draggingTabId === tab.id ? "scale-[.98] opacity-45" : ""} ${
                   dragOverTabId === tab.id && draggingTabId !== tab.id ? "shadow-[inset_0_-2px_0_#8ab4f8]" : ""
