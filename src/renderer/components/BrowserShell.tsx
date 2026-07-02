@@ -132,12 +132,12 @@ export function BrowserShell() {
             });
         }}
       />
-      <div className="relative min-h-0 flex-1 bg-[#f8fafc]" ref={viewportRef}>
+      <div className="relative min-h-0 flex-1 bg-[#202124]" ref={viewportRef}>
         {!browserState.url && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#101329] text-center">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#202124] text-center">
             <div>
-              <div className="text-2xl font-semibold text-white">Mirrow is ready</div>
-              <div className="mt-2 text-sm text-slate-400">Enter a URL above to load a website.</div>
+              <div className="text-2xl font-semibold text-[#e8eaed]">Mirrow is ready</div>
+              <div className="mt-2 text-sm text-[#9aa0a6]">Search Google or enter a URL.</div>
             </div>
           </div>
         )}

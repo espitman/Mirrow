@@ -8,9 +8,8 @@ import { TranslatePage } from "./routes/translate";
 
 const rootRoute = createRootRoute({
   component: () => (
-    <div className="h-screen overflow-hidden bg-ink text-slate-100">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.26),transparent_34%),linear-gradient(145deg,#070816,#101329_58%,#070816)]" />
-      <div className="relative flex h-full">
+    <div className="h-screen overflow-hidden bg-[#202124] text-[#e8eaed]">
+      <div className="flex h-full">
         <Sidebar />
         <main className="min-w-0 flex-1 overflow-hidden">
           <Outlet />

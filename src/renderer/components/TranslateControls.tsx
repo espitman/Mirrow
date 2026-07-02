@@ -32,7 +32,7 @@ export function TranslateControls({
   const percent = progress ? Math.round((progress.completed / Math.max(progress.total, 1)) * 100) : 0;
 
   return (
-    <section className="border-b border-white/10 bg-[#0a0d1d]/90 px-4 py-3">
+    <section className="border-b border-[#3c4043] bg-[#202124] px-4 py-2.5">
       <div className="flex items-center gap-3">
         <button className="primary-button" onClick={onTranslate} disabled={isTranslating}>
           <Languages size={17} />
@@ -46,7 +46,7 @@ export function TranslateControls({
         )}
         <button
           type="button"
-          className={instantTranslateMode ? "primary-button bg-violet hover:bg-violet/90" : "secondary-button"}
+          className={instantTranslateMode ? "primary-button" : "secondary-button"}
           onClick={onToggleInstantTranslateMode}
           title="Click a page section to translate it immediately"
         >
@@ -69,14 +69,14 @@ export function TranslateControls({
         </select>
         <div className="min-w-0 flex-1">
           {progress && (
-            <div className="flex items-center gap-3 text-xs text-slate-400">
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
-                <div className="h-full bg-violet transition-all" style={{ width: `${percent}%` }} />
+            <div className="flex items-center gap-3 text-xs text-[#9aa0a6]">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#3c4043]">
+                <div className="h-full bg-[#8ab4f8] transition-all" style={{ width: `${percent}%` }} />
               </div>
               <span className="w-[210px] truncate">{progress.message}</span>
             </div>
           )}
-          {error && <div className="truncate text-xs text-rose-300">{error}</div>}
+          {error && <div className="truncate text-xs text-[#f28b82]">{error}</div>}
         </div>
       </div>
     </section>

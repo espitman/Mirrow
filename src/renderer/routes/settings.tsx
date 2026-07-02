@@ -39,10 +39,10 @@ function ProviderHeader({
 }) {
   return (
     <div className={`flex items-center justify-between gap-3 ${className}`}>
-      <div className="text-sm font-medium text-white">{title}</div>
-      <label className="flex items-center gap-2 text-xs text-slate-300">
+      <div className="text-sm font-medium text-[#e8eaed]">{title}</div>
+      <label className="flex items-center gap-2 text-xs text-[#bdc1c6]">
         <input
-          className="h-4 w-4 accent-violet"
+          className="h-4 w-4 accent-[#8ab4f8]"
           type="checkbox"
           checked={enabled}
           onChange={(event) => onChange(event.target.checked)}
@@ -173,15 +173,15 @@ export function SettingsPage() {
   return (
     <section className="h-full overflow-auto p-8">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-white">Settings</h1>
-        <p className="mt-1 text-sm text-slate-400">Configure Liara, OpenRouter, Google, local engines, batching, and default translation language.</p>
+        <h1 className="text-2xl font-semibold text-[#e8eaed]">Settings</h1>
+        <p className="mt-1 text-sm text-[#9aa0a6]">Configure Liara, OpenRouter, Google, local engines, batching, and default translation language.</p>
       </header>
 
       <form onSubmit={submit} className="glass max-w-3xl rounded-xl p-6">
-        <div className="mb-6 flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] p-4">
+        <div className="mb-6 flex items-center justify-between rounded-xl border border-[#3c4043] bg-[#202124] p-4">
           <div>
-            <div className="text-sm font-medium text-white">{engineLabel}</div>
-            <div className="mt-1 text-xs text-slate-400">{status.data?.message ?? "Checking translation provider"}</div>
+            <div className="text-sm font-medium text-[#e8eaed]">{engineLabel}</div>
+            <div className="mt-1 text-xs text-[#9aa0a6]">{status.data?.message ?? "Checking translation provider"}</div>
           </div>
           <div className="flex items-center gap-3">
             <StatusBadge connected={status.data?.connected} loading={status.isLoading} />
@@ -192,12 +192,12 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="mb-6 grid grid-cols-3 gap-1 rounded-lg bg-black/20 p-1 text-sm">
+        <div className="mb-6 grid grid-cols-3 gap-1 rounded-full bg-[#202124] p-1 text-sm">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
-              className={`rounded-md px-3 py-2 transition ${activeTab === tab.id ? "bg-violet text-white" : "text-slate-300 hover:bg-white/[0.08]"}`}
+              className={`rounded-full px-3 py-2 transition ${activeTab === tab.id ? "bg-[#8ab4f8] text-[#202124]" : "text-[#bdc1c6] hover:bg-white/[0.08]"}`}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}
@@ -208,7 +208,7 @@ export function SettingsPage() {
         {activeTab === "engine" && (
           <div className="grid gap-5">
             <label className="block">
-              <span className="mb-2 block text-sm text-slate-300">Translation engine</span>
+              <span className="mb-2 block text-sm text-[#bdc1c6]">Translation engine</span>
               <select
                 className="field"
                 value={form.translationEngine}
@@ -224,7 +224,7 @@ export function SettingsPage() {
 
             {form.translationEngine === "local" ? (
               <label className="block">
-                <span className="mb-2 block text-sm text-slate-300">Local endpoint URL</span>
+                <span className="mb-2 block text-sm text-[#bdc1c6]">Local endpoint URL</span>
                 <input
                   className="field"
                   value={form.lmStudioBaseUrl}
@@ -233,7 +233,7 @@ export function SettingsPage() {
               </label>
             ) : (
               <label className="block">
-                <span className="mb-2 block text-sm text-slate-300">Model</span>
+                <span className="mb-2 block text-sm text-[#bdc1c6]">Model</span>
                 <select
                   className="field"
                   value={activeModel}
@@ -252,14 +252,14 @@ export function SettingsPage() {
               </label>
             )}
 
-            <div className="grid gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm">
+            <div className="grid gap-3 rounded-xl border border-[#3c4043] bg-[#202124] p-4 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Active provider</span>
-                <span className="font-medium text-white">{engineLabel}</span>
+                <span className="text-[#9aa0a6]">Active provider</span>
+                <span className="font-medium text-[#e8eaed]">{engineLabel}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Model</span>
-                <span className="max-w-[320px] truncate font-medium text-white">{activeModel}</span>
+                <span className="text-[#9aa0a6]">Model</span>
+                <span className="max-w-[320px] truncate font-medium text-[#e8eaed]">{activeModel}</span>
               </div>
             </div>
           </div>
@@ -267,7 +267,7 @@ export function SettingsPage() {
 
         {activeTab === "providers" && (
           <div className="grid gap-5">
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="rounded-xl border border-[#3c4043] bg-[#202124] p-4">
               <ProviderHeader
                 title="Liara"
                 enabled={form.onlineEnabled}
@@ -275,7 +275,7 @@ export function SettingsPage() {
               />
               <div className="grid gap-4">
                 <label className="block">
-                  <span className="mb-2 block text-sm text-slate-300">Liara base URL</span>
+                  <span className="mb-2 block text-sm text-[#bdc1c6]">Liara base URL</span>
                   <input
                     className="field"
                     disabled={!form.onlineEnabled}
@@ -284,7 +284,7 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-2 block text-sm text-slate-300">Liara model</span>
+                  <span className="mb-2 block text-sm text-[#bdc1c6]">Liara model</span>
                   <select
                     className="field"
                     disabled={!form.onlineEnabled}
@@ -302,7 +302,7 @@ export function SettingsPage() {
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-2 block text-sm text-slate-300">API key</span>
+                  <span className="mb-2 block text-sm text-[#bdc1c6]">API key</span>
                   <input
                     className="field"
                     disabled={!form.onlineEnabled}
@@ -315,7 +315,7 @@ export function SettingsPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="rounded-xl border border-[#3c4043] bg-[#202124] p-4">
               <ProviderHeader
                 title="OpenRouter"
                 enabled={form.openRouterEnabled}
@@ -323,7 +323,7 @@ export function SettingsPage() {
               />
               <div className="grid gap-4">
                 <label className="block">
-                  <span className="mb-2 block text-sm text-slate-300">OpenRouter base URL</span>
+                  <span className="mb-2 block text-sm text-[#bdc1c6]">OpenRouter base URL</span>
                   <input
                     className="field"
                     disabled={!form.openRouterEnabled}
@@ -332,7 +332,7 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-2 block text-sm text-slate-300">OpenRouter model</span>
+                  <span className="mb-2 block text-sm text-[#bdc1c6]">OpenRouter model</span>
                   <select
                     className="field"
                     disabled={!form.openRouterEnabled}
@@ -350,7 +350,7 @@ export function SettingsPage() {
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-2 block text-sm text-slate-300">OpenRouter API key</span>
+                  <span className="mb-2 block text-sm text-[#bdc1c6]">OpenRouter API key</span>
                   <input
                     className="field"
                     disabled={!form.openRouterEnabled}
@@ -363,7 +363,7 @@ export function SettingsPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="rounded-xl border border-[#3c4043] bg-[#202124] p-4">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <ProviderHeader
                   title="Google AI Studio"
@@ -383,7 +383,7 @@ export function SettingsPage() {
               </div>
               <div className="grid gap-4">
                 <label className="block">
-                  <span className="mb-2 block text-sm text-slate-300">Gemini base URL</span>
+                  <span className="mb-2 block text-sm text-[#bdc1c6]">Gemini base URL</span>
                   <input
                     className="field"
                     disabled={!form.googleEnabled}
@@ -392,7 +392,7 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-2 block text-sm text-slate-300">Gemini model</span>
+                  <span className="mb-2 block text-sm text-[#bdc1c6]">Gemini model</span>
                   <select
                     className="field"
                     value={form.googleModelName}
@@ -409,10 +409,10 @@ export function SettingsPage() {
                     ))}
                     {!form.googleModelName && !(googleModels.data ?? []).length && <option value="">No Gemini models loaded</option>}
                   </select>
-                  {googleModels.isError && <div className="mt-2 text-xs text-rose-300">Could not load Gemini models. Check the API key.</div>}
+                  {googleModels.isError && <div className="mt-2 text-xs text-[#f28b82]">Could not load Gemini models. Check the API key.</div>}
                 </label>
                 <label className="block">
-                  <span className="mb-2 block text-sm text-slate-300">Google AI Studio API key</span>
+                  <span className="mb-2 block text-sm text-[#bdc1c6]">Google AI Studio API key</span>
                   <input
                     className="field"
                     disabled={!form.googleEnabled}
@@ -425,7 +425,7 @@ export function SettingsPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="rounded-xl border border-[#3c4043] bg-[#202124] p-4">
               <ProviderHeader
                 title="Local provider"
                 enabled={form.localEnabled}
@@ -433,7 +433,7 @@ export function SettingsPage() {
               />
               <div className="grid gap-4">
                 <label className="block">
-                  <span className="mb-2 block text-sm text-slate-300">Local endpoint URL</span>
+                  <span className="mb-2 block text-sm text-[#bdc1c6]">Local endpoint URL</span>
                   <input
                     className="field"
                     disabled={!form.localEnabled}
@@ -449,7 +449,7 @@ export function SettingsPage() {
         {activeTab === "general" && (
           <div className="grid grid-cols-3 gap-4">
             <label className="block">
-              <span className="mb-2 block text-sm text-slate-300">Temperature</span>
+              <span className="mb-2 block text-sm text-[#bdc1c6]">Temperature</span>
               <input
                 className="field"
                 type="number"
@@ -461,7 +461,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="block">
-              <span className="mb-2 block text-sm text-slate-300">Batch size</span>
+              <span className="mb-2 block text-sm text-[#bdc1c6]">Batch size</span>
               <input
                 className="field"
                 type="number"
@@ -472,7 +472,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="block">
-              <span className="mb-2 block text-sm text-slate-300">Default target</span>
+              <span className="mb-2 block text-sm text-[#bdc1c6]">Default target</span>
               <input
                 className="field"
                 value={form.defaultTargetLanguage}
@@ -487,8 +487,8 @@ export function SettingsPage() {
             <Save size={16} />
             Save Settings
           </button>
-          {updateSettings.isSuccess && <span className="text-sm text-emerald-300">Saved</span>}
-          {updateSettings.isError && <span className="text-sm text-rose-300">Could not save settings</span>}
+          {updateSettings.isSuccess && <span className="text-sm text-[#81c995]">Saved</span>}
+          {updateSettings.isError && <span className="text-sm text-[#f28b82]">Could not save settings</span>}
         </div>
       </form>
     </section>
