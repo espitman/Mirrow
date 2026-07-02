@@ -95,7 +95,6 @@ export function BrowserShell() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="drag-region h-9 shrink-0 border-b border-white/10 bg-black/20" />
       <BrowserToolbar
         state={browserState}
         onLoadUrl={loadUrl}

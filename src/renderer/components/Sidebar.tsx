@@ -1,6 +1,16 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { BookOpenText, ChevronDown, Clock3, Languages, MonitorCog, Settings, Sparkles } from "lucide-react";
+import {
+  BookOpenText,
+  ChevronDown,
+  Clock3,
+  Languages,
+  MonitorCog,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  Sparkles,
+} from "lucide-react";
 import { LIARA_MODEL_OPTIONS, OPENROUTER_MODEL_OPTIONS } from "../../shared/constants";
 import { useGoogleAiModelsQuery, useLmStudioStatusQuery, useSettingsQuery, useUpdateSettingsMutation } from "../lib/hooks";
 import { StatusBadge } from "./StatusBadge";
@@ -25,6 +35,7 @@ export function Sidebar() {
   const settings = useSettingsQuery();
   const updateSettings = useUpdateSettingsMutation();
   const status = useLmStudioStatusQuery();
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("mirrow.sidebar.collapsed") === "true");
   const selectedEngine = settings.data?.translationEngine ?? "online";
   const enabledEngines = ([
     ["online", settings.data?.onlineEnabled],
@@ -44,6 +55,10 @@ export function Sidebar() {
     window.mirrow.onlineCost.get().then((state) => setOnlineCost(state.totalToman)).catch(() => undefined);
     return window.mirrow.onlineCost.onUpdate((state) => setOnlineCost(state.totalToman));
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("mirrow.sidebar.collapsed", String(collapsed));
+  }, [collapsed]);
 
   const setEngine = (translationEngine: TranslationEngine) => {
     if (!enabledEngines.includes(translationEngine)) return;
@@ -103,15 +118,31 @@ export function Sidebar() {
         : [];
 
   return (
-    <aside className="drag-region flex h-full w-[292px] shrink-0 flex-col border-r border-white/10 bg-black/20 px-4 pb-4 pt-12 backdrop-blur-xl">
-      <div className="no-drag mb-7 flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet text-white shadow-glow">
+    <aside
+      className={`drag-region flex h-full shrink-0 flex-col border-r border-white/10 bg-black/20 pb-4 pt-12 backdrop-blur-xl transition-[width,padding] duration-200 ${
+        collapsed ? "w-[80px] px-3" : "w-[292px] px-4"
+      }`}
+    >
+      <div className={`no-drag mb-7 flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet text-white shadow-glow">
           <Sparkles size={22} />
         </div>
-        <div>
-          <div className="text-lg font-semibold tracking-normal text-white">Mirrow</div>
-          <div className="text-xs text-slate-400">AI Web Translator</div>
-        </div>
+        {!collapsed && (
+          <div className="min-w-0 flex-1">
+            <div className="text-lg font-semibold tracking-normal text-white">Mirrow</div>
+            <div className="text-xs text-slate-400">AI Web Translator</div>
+          </div>
+        )}
+        {!collapsed && (
+          <button
+            type="button"
+            className="icon-button ml-auto h-9 w-9"
+            onClick={() => setCollapsed(true)}
+            title="Close sidebar"
+          >
+            <PanelLeftClose size={17} />
+          </button>
+        )}
       </div>
 
       <nav className="no-drag space-y-1">
@@ -122,19 +153,33 @@ export function Sidebar() {
             <Link
               key={item.to}
               to={item.to}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
+              title={collapsed ? item.label : undefined}
+              className={`flex items-center rounded-lg py-2.5 text-sm transition ${
                 active ? "bg-white/[0.1] text-white" : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
-              }`}
+              } ${collapsed ? "justify-center px-0" : "gap-3 px-3"}`}
             >
               <Icon size={18} />
-              {item.label}
+              {!collapsed && item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="no-drag mt-6 space-y-4">
-        <section className="glass rounded-xl p-4">
+      {collapsed && (
+        <button
+          type="button"
+          className="no-drag mt-4 flex h-10 w-full items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
+          onClick={() => setCollapsed(false)}
+          title="Open sidebar"
+        >
+          <PanelLeftOpen size={18} />
+        </button>
+      )}
+
+      {!collapsed && (
+        <div className="no-drag mt-6 flex min-h-0 flex-1 flex-col">
+          <div className="space-y-4">
+            <section className="glass rounded-xl p-4">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <div className="text-xs uppercase text-slate-500">Engine</div>
@@ -202,22 +247,24 @@ export function Sidebar() {
               <div className="mt-1 text-lg font-semibold text-white">{Math.round(onlineCost).toLocaleString("en-US")} Toman</div>
             </div>
           )}
-        </section>
+            </section>
 
-        <section className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-          <div className="mb-3 text-xs uppercase text-slate-500">Theme</div>
-          <div className="grid grid-cols-3 gap-1 rounded-lg bg-black/20 p-1 text-xs text-slate-300">
-            <button className="rounded-md px-2 py-1.5 hover:bg-white/[0.08]">System</button>
-            <button className="rounded-md px-2 py-1.5 hover:bg-white/[0.08]">Light</button>
-            <button className="rounded-md bg-white/[0.1] px-2 py-1.5 text-white">Dark</button>
+            <section className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+              <div className="mb-3 text-xs uppercase text-slate-500">Theme</div>
+              <div className="grid grid-cols-3 gap-1 rounded-lg bg-black/20 p-1 text-xs text-slate-300">
+                <button className="rounded-md px-2 py-1.5 hover:bg-white/[0.08]">System</button>
+                <button className="rounded-md px-2 py-1.5 hover:bg-white/[0.08]">Light</button>
+                <button className="rounded-md bg-white/[0.1] px-2 py-1.5 text-white">Dark</button>
+              </div>
+            </section>
           </div>
-        </section>
-      </div>
 
-      <div className="no-drag mt-auto rounded-xl border border-violet/20 bg-violet/10 p-4">
-        <div className="text-sm font-semibold text-white">Mirrow</div>
-        <div className="mt-1 text-xs leading-5 text-slate-300">See the world in your language.</div>
-      </div>
+          <div className="mt-auto rounded-xl border border-violet/20 bg-violet/10 p-4">
+            <div className="text-sm font-semibold text-white">Mirrow</div>
+            <div className="mt-1 text-xs leading-5 text-slate-300">See the world in your language.</div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
