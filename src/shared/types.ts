@@ -79,6 +79,15 @@ export type BrowserState = {
   canGoBack: boolean;
   canGoForward: boolean;
   isLoading: boolean;
+  activeTabId: string;
+  tabs: BrowserTabState[];
+};
+
+export type BrowserTabState = {
+  id: string;
+  url: string;
+  title: string;
+  isLoading: boolean;
 };
 
 export type TranslationProgress = {

@@ -10,6 +10,9 @@ export function registerIpc(browser: BrowserController) {
     "browser:set-bounds",
     "browser:get-state",
     "browser:load-url",
+    "browser:create-tab",
+    "browser:switch-tab",
+    "browser:close-tab",
     "browser:go-back",
     "browser:go-forward",
     "browser:reload",
@@ -35,6 +38,9 @@ export function registerIpc(browser: BrowserController) {
   ipcMain.handle("browser:set-bounds", (_event, bounds: BrowserBounds) => browser.setBounds(bounds));
   ipcMain.handle("browser:get-state", () => browser.getState());
   ipcMain.handle("browser:load-url", (_event, url: string) => browser.loadUrl(String(url)));
+  ipcMain.handle("browser:create-tab", (_event, url?: string) => browser.createTab(url ? String(url) : undefined));
+  ipcMain.handle("browser:switch-tab", (_event, id: string) => browser.switchTab(String(id)));
+  ipcMain.handle("browser:close-tab", (_event, id: string) => browser.closeTab(String(id)));
   ipcMain.handle("browser:go-back", () => browser.goBack());
   ipcMain.handle("browser:go-forward", () => browser.goForward());
   ipcMain.handle("browser:reload", () => browser.reload());

@@ -14,6 +14,9 @@ type AddressSuggestion = {
 type BrowserToolbarProps = {
   state: BrowserState;
   onLoadUrl: (url: string) => Promise<void>;
+  onCreateTab: () => Promise<BrowserState>;
+  onSwitchTab: (id: string) => Promise<BrowserState>;
+  onCloseTab: (id: string) => Promise<BrowserState>;
   onBack: () => void;
   onForward: () => void;
   onReload: () => void;
@@ -21,7 +24,18 @@ type BrowserToolbarProps = {
   onRetry: () => void;
 };
 
-export function BrowserToolbar({ state, onLoadUrl, onBack, onForward, onReload, navigationError, onRetry }: BrowserToolbarProps) {
+export function BrowserToolbar({
+  state,
+  onLoadUrl,
+  onCreateTab,
+  onSwitchTab,
+  onCloseTab,
+  onBack,
+  onForward,
+  onReload,
+  navigationError,
+  onRetry,
+}: BrowserToolbarProps) {
   const history = useHistoryQuery();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [value, setValue] = useState("");
@@ -49,12 +63,22 @@ export function BrowserToolbar({ state, onLoadUrl, onBack, onForward, onReload, 
       if (modifier && event.key.toLowerCase() === "r") {
         event.preventDefault();
         onReload();
+        return;
+      }
+      if (modifier && event.key.toLowerCase() === "t") {
+        event.preventDefault();
+        onCreateTab().then(() => focusAddressBar()).catch(() => undefined);
+        return;
+      }
+      if (modifier && event.key.toLowerCase() === "w") {
+        event.preventDefault();
+        if (state.activeTabId) onCloseTab(state.activeTabId).catch(() => undefined);
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onReload]);
+  }, [onCloseTab, onCreateTab, onReload, state.activeTabId]);
 
   const suggestions = useMemo(() => {
     if (!showSuggestions) return [];
@@ -164,22 +188,54 @@ export function BrowserToolbar({ state, onLoadUrl, onBack, onForward, onReload, 
     }
   };
 
-  const tabTitle = state.title || state.url || "New tab";
+  const tabs = state.tabs.length ? state.tabs : [{ id: state.activeTabId || "__active__", title: state.title, url: state.url, isLoading: state.isLoading }];
+  const tabLabel = (title: string, url: string) => title || url || "New tab";
 
   return (
     <div className="border-b border-[#3c4043] bg-[#202124] text-[#e8eaed]">
-      <div className="drag-region flex h-10 items-end gap-1 px-3 pt-2">
-        <div className="no-drag flex h-8 min-w-0 max-w-[260px] items-center gap-2 rounded-t-xl bg-[#2b2c30] pl-3 pr-1 text-xs text-[#e8eaed]">
-          <span className="h-3 w-3 shrink-0 rounded-full bg-[#8ab4f8]" />
-          <span className="truncate">{tabTitle}</span>
-          <button type="button" className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#bdc1c6] hover:bg-white/[0.08]" title="Close tab">
-            <X size={14} />
-          </button>
+      <div className="drag-region flex h-10 items-end gap-1 overflow-hidden px-3 pt-2">
+        <div className="no-drag flex min-w-0 flex-1 items-end gap-1 overflow-hidden">
+          {tabs.map((tab) => {
+            const active = tab.id === state.activeTabId;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`group flex h-8 min-w-[120px] max-w-[240px] flex-1 items-center gap-2 rounded-t-xl pl-3 pr-1 text-left text-xs transition ${
+                  active ? "bg-[#2b2c30] text-[#e8eaed]" : "bg-transparent text-[#bdc1c6] hover:bg-white/[0.06]"
+                }`}
+                onClick={() => {
+                  if (!active && tab.id !== "__active__") onSwitchTab(tab.id).catch(() => undefined);
+                }}
+                title={tabLabel(tab.title, tab.url)}
+              >
+                <span className={`h-3 w-3 shrink-0 rounded-full ${tab.isLoading ? "animate-pulse bg-[#fdd663]" : "bg-[#8ab4f8]"}`} />
+                <span className="min-w-0 flex-1 truncate">{tabLabel(tab.title, tab.url)}</span>
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#bdc1c6] opacity-80 hover:bg-white/[0.1] hover:opacity-100"
+                  title="Close tab"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (tab.id !== "__active__") onCloseTab(tab.id).catch(() => undefined);
+                  }}
+                >
+                  <X size={14} />
+                </span>
+              </button>
+            );
+          })}
         </div>
-        <button type="button" className="no-drag mb-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full text-[#bdc1c6] hover:bg-white/[0.08]" title="New tab">
+        <button
+          type="button"
+          className="no-drag mb-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#bdc1c6] hover:bg-white/[0.08]"
+          title="New tab"
+          onClick={() => onCreateTab().then(() => focusAddressBar()).catch(() => undefined)}
+        >
           <Plus size={16} />
         </button>
-        <div className="flex-1" />
       </div>
 
       <form onSubmit={submit} className="no-drag relative flex h-12 items-center gap-1 bg-[#2b2c30] px-3">

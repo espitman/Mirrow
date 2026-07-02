@@ -24,6 +24,9 @@ declare global {
         setBounds: (bounds: BrowserBounds) => Promise<void>;
         getState: () => Promise<BrowserState>;
         loadUrl: (url: string) => Promise<BrowserState>;
+        createTab: (url?: string) => Promise<BrowserState>;
+        switchTab: (id: string) => Promise<BrowserState>;
+        closeTab: (id: string) => Promise<BrowserState>;
         goBack: () => Promise<BrowserState>;
         goForward: () => Promise<BrowserState>;
         reload: () => Promise<BrowserState>;

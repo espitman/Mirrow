@@ -9,6 +9,8 @@ const INITIAL_BROWSER_STATE: BrowserState = {
   canGoBack: false,
   canGoForward: false,
   isLoading: false,
+  activeTabId: "",
+  tabs: [],
 };
 
 export function BrowserShell() {
@@ -98,6 +100,21 @@ export function BrowserShell() {
       <BrowserToolbar
         state={browserState}
         onLoadUrl={loadUrl}
+        onCreateTab={async () => {
+          const nextState = await window.mirrow.browser.createTab();
+          setBrowserState(nextState);
+          return nextState;
+        }}
+        onSwitchTab={async (id) => {
+          const nextState = await window.mirrow.browser.switchTab(id);
+          setBrowserState(nextState);
+          return nextState;
+        }}
+        onCloseTab={async (id) => {
+          const nextState = await window.mirrow.browser.closeTab(id);
+          setBrowserState(nextState);
+          return nextState;
+        }}
         onBack={() => window.mirrow.browser.goBack().then(setBrowserState)}
         onForward={() => window.mirrow.browser.goForward().then(setBrowserState)}
         onReload={() => window.mirrow.browser.reload().then(setBrowserState)}

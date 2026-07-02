@@ -24,13 +24,20 @@ const GOOGLE_TRANSLATION_CONCURRENCY = 3;
 const LOCAL_MIN_BATCH_SIZE = 36;
 const TRANSLATION_RETRY_ATTEMPTS = 3;
 
+type BrowserTabRecord = {
+  id: string;
+  view: BrowserView;
+  isLoading: boolean;
+};
+
 export class BrowserController {
   private view: BrowserView | null = null;
+  private tabs: BrowserTabRecord[] = [];
+  private activeTabId = "";
   private bounds: BrowserBounds | null = null;
   private exclusionModeEnabled = false;
   private selectionModeEnabled = false;
   private instantTranslateModeEnabled = false;
-  private isPageLoading = false;
   private onlineCostToman = 0;
   private translationCancelled = false;
   private translationInProgress = false;
@@ -41,8 +48,64 @@ export class BrowserController {
 
   create() {
     if (this.view) return this.view;
+    const tab = this.createTabRecord();
+    this.tabs.push(tab);
+    this.activateTab(tab.id);
+    this.emitState();
+    return tab.view;
+  }
 
-    this.view = new BrowserView({
+  createTab(rawUrl?: string) {
+    const tab = this.createTabRecord();
+    this.tabs.push(tab);
+    this.activateTab(tab.id);
+    if (rawUrl) {
+      this.loadUrl(rawUrl).catch((error: unknown) => {
+        if (!isNavigationAbortError(error)) this.sendError(readError(error));
+      });
+    }
+    this.emitState();
+    return this.getState();
+  }
+
+  switchTab(id: string) {
+    const tab = this.tabs.find((item) => item.id === id);
+    if (!tab) return this.getState();
+    this.activateTab(tab.id);
+    this.emitState();
+    this.reinjectInstantTranslateMode(0);
+    return this.getState();
+  }
+
+  closeTab(id: string) {
+    const tab = this.tabs.find((item) => item.id === id);
+    if (!tab) return this.getState();
+
+    const wasActive = tab.id === this.activeTabId;
+    this.window.removeBrowserView(tab.view);
+    tab.view.webContents.close();
+    this.tabs = this.tabs.filter((item) => item.id !== id);
+
+    if (!this.tabs.length) {
+      this.view = null;
+      this.activeTabId = "";
+      this.create();
+      return this.getState();
+    }
+
+    if (wasActive) {
+      const nextTab = this.tabs[Math.max(0, this.tabs.length - 1)];
+      this.activateTab(nextTab.id);
+    }
+
+    this.emitState();
+    return this.getState();
+  }
+
+  private createTabRecord(): BrowserTabRecord {
+    const id = crypto.randomUUID();
+
+    const view = new BrowserView({
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
@@ -52,45 +115,44 @@ export class BrowserController {
       },
     });
 
-    this.window.setBrowserView(this.view);
-    this.view.setAutoResize({ width: false, height: false });
-    this.view.webContents.setWindowOpenHandler(({ url }) => {
-      this.loadUrl(url).catch((error: unknown) => {
-        if (!isNavigationAbortError(error)) this.sendError(readError(error));
-      });
+    const tab: BrowserTabRecord = { id, view, isLoading: false };
+    view.setAutoResize({ width: false, height: false });
+    view.webContents.setWindowOpenHandler(({ url }) => {
+      this.createTab(url);
       return { action: "deny" };
     });
 
-    this.view.webContents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
+    view.webContents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
       if (!isMainFrame || isInPlace) return;
-      this.isPageLoading = true;
-      this.emitState();
+      tab.isLoading = true;
+      this.emitStateIfActive(tab.id);
     });
-    this.view.webContents.on("did-stop-loading", () => {
-      this.isPageLoading = false;
-      this.emitState();
-      this.reinjectInstantTranslateMode();
+    view.webContents.on("did-stop-loading", () => {
+      tab.isLoading = false;
+      this.emitStateIfActive(tab.id);
+      this.reinjectInstantTranslateModeForTab(tab.id);
     });
-    this.view.webContents.on("did-finish-load", () => {
-      this.isPageLoading = false;
-      this.emitState();
-      this.reinjectInstantTranslateMode();
+    view.webContents.on("did-finish-load", () => {
+      tab.isLoading = false;
+      this.emitStateIfActive(tab.id);
+      this.reinjectInstantTranslateModeForTab(tab.id);
     });
-    this.view.webContents.on("did-navigate", () => {
-      this.isPageLoading = false;
-      this.emitState();
-      this.reinjectInstantTranslateMode();
+    view.webContents.on("did-navigate", () => {
+      tab.isLoading = false;
+      this.emitStateIfActive(tab.id);
+      this.reinjectInstantTranslateModeForTab(tab.id);
     });
-    this.view.webContents.on("dom-ready", () => this.reinjectInstantTranslateMode());
-    this.view.webContents.on("did-navigate-in-page", () => this.emitState());
-    this.view.webContents.on("page-title-updated", () => this.emitState());
-    this.view.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
+    view.webContents.on("dom-ready", () => this.reinjectInstantTranslateModeForTab(tab.id));
+    view.webContents.on("did-navigate-in-page", () => this.emitStateIfActive(tab.id));
+    view.webContents.on("page-title-updated", () => this.emitStateIfActive(tab.id));
+    view.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
       if (!isMainFrame) return;
-      this.isPageLoading = false;
-      this.emitState();
-      if (code !== -3) this.sendError(`Website failed to load: ${description || url}`);
+      tab.isLoading = false;
+      this.emitStateIfActive(tab.id);
+      if (code !== -3 && tab.id === this.activeTabId) this.sendError(`Website failed to load: ${description || url}`);
     });
-    this.view.webContents.on("console-message", (_event, _level, message) => {
+    view.webContents.on("console-message", (_event, _level, message) => {
+      if (tab.id !== this.activeTabId) return;
       if (message.startsWith("__MIRROW_RETRANSLATE__:")) {
         const id = message.slice("__MIRROW_RETRANSLATE__:".length).trim();
         this.retranslateNode(id).catch((error: unknown) => this.sendError(readError(error)));
@@ -114,31 +176,63 @@ export class BrowserController {
       }
     });
 
-    if (this.bounds) this.setBounds(this.bounds);
-    return this.view;
+    return tab;
+  }
+
+  private activateTab(id: string) {
+    const tab = this.tabs.find((item) => item.id === id);
+    if (!tab) return;
+    this.activeTabId = tab.id;
+    this.view = tab.view;
+    this.window.setBrowserView(tab.view);
+    if (this.bounds) this.applyBoundsToView(tab.view, this.bounds);
+  }
+
+  private getActiveTab() {
+    return this.tabs.find((item) => item.id === this.activeTabId) ?? null;
+  }
+
+  private getTabForView(view: BrowserView) {
+    return this.tabs.find((item) => item.view === view) ?? null;
+  }
+
+  private applyBoundsToView(view: BrowserView, bounds: BrowserBounds) {
+    if (bounds.width < MIN_BROWSER_SIZE || bounds.height < MIN_BROWSER_SIZE) {
+      view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+      return;
+    }
+    view.setBounds(bounds);
+  }
+
+  private emitStateIfActive(tabId: string) {
+    if (tabId === this.activeTabId) this.emitState();
+  }
+
+  private reinjectInstantTranslateModeForTab(tabId: string) {
+    if (tabId === this.activeTabId) this.reinjectInstantTranslateMode();
   }
 
   destroy() {
-    if (!this.view) return;
-    this.window.removeBrowserView(this.view);
-    this.view.webContents.close();
+    for (const tab of this.tabs) {
+      this.window.removeBrowserView(tab.view);
+      tab.view.webContents.close();
+    }
+    this.tabs = [];
+    this.activeTabId = "";
     this.view = null;
   }
 
   setBounds(bounds: BrowserBounds) {
     this.bounds = sanitizeBounds(bounds);
     if (!this.view) this.create();
-    if (this.bounds.width < MIN_BROWSER_SIZE || this.bounds.height < MIN_BROWSER_SIZE) {
-      this.view?.setBounds({ x: 0, y: 0, width: 0, height: 0 });
-      return;
-    }
-    this.view?.setBounds(this.bounds);
+    if (this.view) this.applyBoundsToView(this.view, this.bounds);
   }
 
   async loadUrl(rawUrl: string) {
     const view = this.create();
+    const tab = this.getTabForView(view);
     const url = normalizeUrl(rawUrl);
-    this.isPageLoading = true;
+    if (tab) tab.isLoading = true;
     this.emitState();
     try {
       await view.webContents.loadURL(url);
@@ -147,7 +241,7 @@ export class BrowserController {
       if (!isNavigationAbortError(error)) throw error;
       return this.getState();
     } finally {
-      this.isPageLoading = false;
+      if (tab) tab.isLoading = false;
       this.emitState();
     }
   }
@@ -164,7 +258,8 @@ export class BrowserController {
 
   async reload() {
     if (!this.view) return this.getState();
-    this.isPageLoading = true;
+    const tab = this.getActiveTab();
+    if (tab) tab.isLoading = true;
     this.emitState();
     this.view.webContents.reload();
     return this.getState();
@@ -312,12 +407,20 @@ export class BrowserController {
 
   getState(): BrowserState {
     const contents = this.view?.webContents;
+    const activeTab = this.getActiveTab();
     return {
       url: contents?.getURL() ?? "",
       title: contents?.getTitle() ?? "",
       canGoBack: contents?.navigationHistory.canGoBack() ?? false,
       canGoForward: contents?.navigationHistory.canGoForward() ?? false,
-      isLoading: this.isPageLoading,
+      isLoading: activeTab?.isLoading ?? false,
+      activeTabId: this.activeTabId,
+      tabs: this.tabs.map((tab) => ({
+        id: tab.id,
+        url: tab.view.webContents.getURL(),
+        title: tab.view.webContents.getTitle(),
+        isLoading: tab.isLoading,
+      })),
     };
   }
 
