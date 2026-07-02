@@ -20,6 +20,8 @@ export function BrowserShell() {
   const [instantTranslateMode, setInstantTranslateMode] = useState(false);
   const [progress, setProgress] = useState<TranslationProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [navigationError, setNavigationError] = useState<string | null>(null);
+  const [lastNavigationInput, setLastNavigationInput] = useState("");
 
   const syncBounds = useCallback(() => {
     const element = viewportRef.current;
@@ -65,11 +67,20 @@ export function BrowserShell() {
     };
   }, []);
 
-  const loadUrl = (url: string) => {
+  const loadUrl = async (url: string) => {
     setError(null);
+    setNavigationError(null);
+    setLastNavigationInput(url);
     setInstantTranslateMode(false);
     window.mirrow.browser.setInstantTranslateMode(false).catch(() => undefined);
-    window.mirrow.browser.loadUrl(url).then(setBrowserState).catch((nextError: Error) => setError(nextError.message));
+    try {
+      const nextState = await window.mirrow.browser.loadUrl(url);
+      setBrowserState(nextState);
+      setNavigationError(null);
+    } catch (nextError) {
+      setNavigationError(nextError instanceof Error ? nextError.message : String(nextError));
+      throw nextError;
+    }
   };
 
   const translate = () => {
@@ -91,6 +102,10 @@ export function BrowserShell() {
         onBack={() => window.mirrow.browser.goBack().then(setBrowserState)}
         onForward={() => window.mirrow.browser.goForward().then(setBrowserState)}
         onReload={() => window.mirrow.browser.reload().then(setBrowserState)}
+        navigationError={navigationError}
+        onRetry={() => {
+          if (lastNavigationInput) void loadUrl(lastNavigationInput);
+        }}
       />
       <TranslateControls
         sourceLanguage={sourceLanguage}

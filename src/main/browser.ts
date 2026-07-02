@@ -15,6 +15,7 @@ import type {
 import { addHistory } from "./history.js";
 import { getSettings } from "./settings.js";
 import { translateBatch } from "./translator.js";
+import { resolveNavigationInput } from "../shared/navigation.js";
 
 const MIN_BROWSER_SIZE = 120;
 const LOCAL_TRANSLATION_CONCURRENCY = 8;
@@ -1744,12 +1745,7 @@ export class BrowserController {
 }
 
 export function normalizeUrl(rawUrl: string) {
-  const trimmed = rawUrl.trim();
-  if (!trimmed) throw new Error("Enter a URL first.");
-
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  if (/^[\w.-]+(:\d+)?(\/|$)/i.test(trimmed)) return `https://${trimmed}`;
-  throw new Error("Invalid URL.");
+  return resolveNavigationInput(rawUrl).url;
 }
 
 function sanitizeBounds(bounds: BrowserBounds): BrowserBounds {
