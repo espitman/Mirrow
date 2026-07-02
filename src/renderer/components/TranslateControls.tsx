@@ -1,4 +1,4 @@
-import { Languages, Square, Zap } from "lucide-react";
+import { ChevronDown, Languages, Square, Zap } from "lucide-react";
 import { LANGUAGE_OPTIONS } from "../../shared/constants";
 import type { TranslationProgress } from "../../shared/types";
 
@@ -100,23 +100,37 @@ export function TranslateControls({
         </div>
         <label className="mt-3 block">
           <span className="mb-1.5 block text-xs uppercase text-[#9aa0a6]">Source</span>
-          <select className="field h-9 text-xs" value={sourceLanguage} onChange={(event) => onSourceLanguageChange(event.target.value)}>
-            {LANGUAGE_OPTIONS.map((language) => (
-              <option key={language.value} value={language.value}>
-                {language.label}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              className="field h-9 appearance-none pr-10 text-xs"
+              value={sourceLanguage}
+              onChange={(event) => onSourceLanguageChange(event.target.value)}
+            >
+              {LANGUAGE_OPTIONS.map((language) => (
+                <option key={language.value} value={language.value}>
+                  {language.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#bdc1c6]" size={16} />
+          </div>
         </label>
         <label className="mt-3 block">
           <span className="mb-1.5 block text-xs uppercase text-[#9aa0a6]">Target</span>
-          <select className="field h-9 text-xs" value={targetLanguage} onChange={(event) => onTargetLanguageChange(event.target.value)}>
-            {LANGUAGE_OPTIONS.filter((language) => language.value !== "auto").map((language) => (
-              <option key={language.value} value={language.label}>
-                {language.label}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              className="field h-9 appearance-none pr-10 text-xs"
+              value={targetLanguage}
+              onChange={(event) => onTargetLanguageChange(event.target.value)}
+            >
+              {LANGUAGE_OPTIONS.filter((language) => language.value !== "auto").map((language) => (
+                <option key={language.value} value={language.label}>
+                  {language.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#bdc1c6]" size={16} />
+          </div>
         </label>
         {(progress || error) && (
           <div className="mt-3">

@@ -151,29 +151,38 @@ export function Sidebar({ underTopBar = false, translateControls }: SidebarProps
         )}
       </div>
 
-      <nav className="no-drag space-y-1">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = pathname === item.to;
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              title={collapsed ? item.label : undefined}
-              className={`flex items-center rounded-lg py-2.5 text-sm transition ${
-                active ? "bg-[#3c4043] text-[#e8eaed]" : "text-[#bdc1c6] hover:bg-white/[0.08] hover:text-[#e8eaed]"
-              } ${collapsed ? "justify-center px-0" : "gap-3 px-3"}`}
-            >
-              <Icon size={18} />
-              {!collapsed && item.label}
-            </Link>
-          );
-        })}
-      </nav>
+      {collapsed && translateControls && <TranslateControls {...translateControls} variant="sidebar" compact />}
+
+      {!collapsed && translateControls && (
+        <div className="no-drag mb-5">
+          <TranslateControls {...translateControls} variant="sidebar" />
+        </div>
+      )}
+
+      {!translateControls && (
+        <nav className="no-drag space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = pathname === item.to;
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                title={collapsed ? item.label : undefined}
+                className={`flex items-center rounded-lg py-2.5 text-sm transition ${
+                  active ? "bg-[#3c4043] text-[#e8eaed]" : "text-[#bdc1c6] hover:bg-white/[0.08] hover:text-[#e8eaed]"
+                } ${collapsed ? "justify-center px-0" : "gap-3 px-3"}`}
+              >
+                <Icon size={18} />
+                {!collapsed && item.label}
+              </Link>
+            );
+          })}
+        </nav>
+      )}
 
       {collapsed && (
         <>
-          {translateControls && <TranslateControls {...translateControls} variant="sidebar" compact />}
           <button
             type="button"
             className="no-drag mt-4 flex h-10 w-full items-center justify-center rounded-full border border-[#5f6368]/70 bg-transparent text-[#bdc1c6] transition hover:bg-white/[0.08] hover:text-[#e8eaed]"
@@ -186,10 +195,8 @@ export function Sidebar({ underTopBar = false, translateControls }: SidebarProps
       )}
 
       {!collapsed && (
-        <div className="no-drag mt-6 flex min-h-0 flex-1 flex-col">
+        <div className="no-drag mt-6 flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
           <div className="space-y-4">
-            {translateControls && <TranslateControls {...translateControls} variant="sidebar" />}
-
             <section className="rounded-xl border border-[#3c4043] bg-[#292a2d] p-4">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>

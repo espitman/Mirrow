@@ -1,5 +1,21 @@
 import { DragEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, ClipboardPaste, Menu, Plus, RefreshCw, Search, ShieldCheck, Star, X } from "lucide-react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BookOpenText,
+  ClipboardPaste,
+  Clock3,
+  Languages,
+  Menu,
+  Plus,
+  RefreshCw,
+  Search,
+  Settings,
+  ShieldCheck,
+  Star,
+  X,
+} from "lucide-react";
 import type { BrowserState } from "../../shared/types";
 import { resolveNavigationInput } from "../../shared/navigation";
 import { useHistoryQuery } from "../lib/hooks";
@@ -25,6 +41,13 @@ type BrowserToolbarProps = {
   onRetry: () => void;
 };
 
+const appMenuItems = [
+  { to: "/translate", label: "Translate", icon: Languages },
+  { to: "/history", label: "History", icon: Clock3 },
+  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/about", label: "About", icon: BookOpenText },
+] as const;
+
 export function BrowserToolbar({
   state,
   onLoadUrl,
@@ -39,7 +62,9 @@ export function BrowserToolbar({
   onRetry,
 }: BrowserToolbarProps) {
   const history = useHistoryQuery();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const appMenuRef = useRef<HTMLDivElement | null>(null);
   const [value, setValue] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [pendingUrl, setPendingUrl] = useState("");
@@ -48,6 +73,7 @@ export function BrowserToolbar({
   const [draggingTabId, setDraggingTabId] = useState("");
   const [dragOverTabId, setDragOverTabId] = useState("");
   const [hoverCard, setHoverCard] = useState<{ tabId: string; x: number; y: number } | null>(null);
+  const [showAppMenu, setShowAppMenu] = useState(false);
   const hoverCardTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -91,6 +117,16 @@ export function BrowserToolbar({
       if (hoverCardTimer.current) window.clearTimeout(hoverCardTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!showAppMenu) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      if (appMenuRef.current?.contains(event.target as Node)) return;
+      setShowAppMenu(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [showAppMenu]);
 
   const suggestions = useMemo(() => {
     if (!showSuggestions) return [];
@@ -384,9 +420,37 @@ export function BrowserToolbar({
         <button type="button" className="chrome-icon-button" title="Favorite">
           <Star size={17} />
         </button>
-        <button type="button" className="chrome-icon-button" title="Menu">
-          <Menu size={18} />
-        </button>
+        <div className="relative" ref={appMenuRef}>
+          <button
+            type="button"
+            className={`chrome-icon-button ${showAppMenu ? "bg-white/[0.08] text-[#e8eaed]" : ""}`}
+            title="Menu"
+            onClick={() => setShowAppMenu((current) => !current)}
+          >
+            <Menu size={18} />
+          </button>
+          {showAppMenu && (
+            <div className="absolute right-0 top-10 z-40 w-56 overflow-hidden rounded-xl border border-[#3c4043] bg-[#292a2d] py-1 shadow-2xl">
+              {appMenuItems.map((item) => {
+                const Icon = item.icon;
+                const active = pathname === item.to;
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={`flex items-center gap-3 px-3 py-2.5 text-sm transition ${
+                      active ? "bg-[#3c4043] text-[#e8eaed]" : "text-[#bdc1c6] hover:bg-white/[0.08] hover:text-[#e8eaed]"
+                    }`}
+                    onClick={() => setShowAppMenu(false)}
+                  >
+                    <Icon size={16} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
         {showSuggestions && suggestions.length > 0 && (
           <div className="absolute left-[132px] right-[112px] top-[46px] z-30 overflow-hidden rounded-xl border border-[#5f6368]/70 bg-[#292a2d] py-1 shadow-2xl">
             {suggestions.map((item, index) => (
