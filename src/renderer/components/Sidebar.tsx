@@ -14,6 +14,7 @@ import {
 import { LIARA_MODEL_OPTIONS, OPENROUTER_MODEL_OPTIONS } from "../../shared/constants";
 import { useGoogleAiModelsQuery, useLmStudioStatusQuery, useSettingsQuery, useUpdateSettingsMutation } from "../lib/hooks";
 import { StatusBadge } from "./StatusBadge";
+import { TranslateControls, type TranslateControlsProps } from "./TranslateControls";
 
 const navItems = [
   { to: "/translate", label: "Translate", icon: Languages },
@@ -32,9 +33,10 @@ const ENGINE_LABELS: Record<TranslationEngine, string> = {
 
 type SidebarProps = {
   underTopBar?: boolean;
+  translateControls?: Omit<TranslateControlsProps, "variant" | "compact">;
 };
 
-export function Sidebar({ underTopBar = false }: SidebarProps) {
+export function Sidebar({ underTopBar = false, translateControls }: SidebarProps) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const settings = useSettingsQuery();
   const updateSettings = useUpdateSettingsMutation();
@@ -170,19 +172,24 @@ export function Sidebar({ underTopBar = false }: SidebarProps) {
       </nav>
 
       {collapsed && (
-        <button
-          type="button"
-          className="no-drag mt-4 flex h-10 w-full items-center justify-center rounded-full border border-[#5f6368]/70 bg-transparent text-[#bdc1c6] transition hover:bg-white/[0.08] hover:text-[#e8eaed]"
-          onClick={() => setCollapsed(false)}
-          title="Open sidebar"
-        >
-          <PanelLeftOpen size={18} />
-        </button>
+        <>
+          {translateControls && <TranslateControls {...translateControls} variant="sidebar" compact />}
+          <button
+            type="button"
+            className="no-drag mt-4 flex h-10 w-full items-center justify-center rounded-full border border-[#5f6368]/70 bg-transparent text-[#bdc1c6] transition hover:bg-white/[0.08] hover:text-[#e8eaed]"
+            onClick={() => setCollapsed(false)}
+            title="Open sidebar"
+          >
+            <PanelLeftOpen size={18} />
+          </button>
+        </>
       )}
 
       {!collapsed && (
         <div className="no-drag mt-6 flex min-h-0 flex-1 flex-col">
           <div className="space-y-4">
+            {translateControls && <TranslateControls {...translateControls} variant="sidebar" />}
+
             <section className="rounded-xl border border-[#3c4043] bg-[#292a2d] p-4">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>

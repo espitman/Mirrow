@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { BrowserState, TranslationProgress } from "../../shared/types";
 import { BrowserToolbar } from "./BrowserToolbar";
 import { Sidebar } from "./Sidebar";
-import { TranslateControls } from "./TranslateControls";
 
 const INITIAL_BROWSER_STATE: BrowserState = {
   url: "",
@@ -133,23 +132,23 @@ export function BrowserShell() {
         }}
       />
       <div className="flex min-h-0 flex-1">
-        <Sidebar underTopBar />
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <TranslateControls
-            sourceLanguage={sourceLanguage}
-            targetLanguage={targetLanguage}
-            isTranslating={isTranslating}
-            progress={progress}
-            error={error}
-            instantTranslateMode={instantTranslateMode}
-            onSourceLanguageChange={setSourceLanguage}
-            onTargetLanguageChange={setTargetLanguage}
-            onTranslate={translate}
-            onCancel={() => {
+        <Sidebar
+          underTopBar
+          translateControls={{
+            sourceLanguage,
+            targetLanguage,
+            isTranslating,
+            progress,
+            error,
+            instantTranslateMode,
+            onSourceLanguageChange: setSourceLanguage,
+            onTargetLanguageChange: setTargetLanguage,
+            onTranslate: translate,
+            onCancel: () => {
               window.mirrow.translation.cancel().catch((nextError: Error) => setError(nextError.message));
               setIsTranslating(false);
-            }}
-            onToggleInstantTranslateMode={() => {
+            },
+            onToggleInstantTranslateMode: () => {
               const next = !instantTranslateMode;
               setInstantTranslateMode(next);
               window.mirrow.browser
@@ -159,8 +158,10 @@ export function BrowserShell() {
                   setInstantTranslateMode(!next);
                   setError(nextError.message);
                 });
-            }}
-          />
+            },
+          }}
+        />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <div className="relative min-h-0 flex-1 bg-[#202124]" ref={viewportRef}>
             {!browserState.url && (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#202124] text-center">
