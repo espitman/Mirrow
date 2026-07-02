@@ -115,6 +115,11 @@ export function BrowserShell() {
           setBrowserState(nextState);
           return nextState;
         }}
+        onReorderTabs={async (orderedIds) => {
+          const nextState = await window.mirrow.browser.reorderTabs(orderedIds);
+          setBrowserState(nextState);
+          return nextState;
+        }}
         onBack={() => window.mirrow.browser.goBack().then(setBrowserState)}
         onForward={() => window.mirrow.browser.goForward().then(setBrowserState)}
         onReload={() => window.mirrow.browser.reload().then(setBrowserState)}

@@ -27,6 +27,7 @@ declare global {
         createTab: (url?: string) => Promise<BrowserState>;
         switchTab: (id: string) => Promise<BrowserState>;
         closeTab: (id: string) => Promise<BrowserState>;
+        reorderTabs: (orderedIds: string[]) => Promise<BrowserState>;
         goBack: () => Promise<BrowserState>;
         goForward: () => Promise<BrowserState>;
         reload: () => Promise<BrowserState>;

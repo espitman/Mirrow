@@ -102,6 +102,17 @@ export class BrowserController {
     return this.getState();
   }
 
+  reorderTabs(orderedIds: string[]) {
+    const tabsById = new Map(this.tabs.map((tab) => [tab.id, tab]));
+    const nextTabs = orderedIds
+      .map((id) => tabsById.get(id))
+      .filter((tab): tab is BrowserTabRecord => Boolean(tab));
+    const remainingTabs = this.tabs.filter((tab) => !orderedIds.includes(tab.id));
+    this.tabs = [...nextTabs, ...remainingTabs];
+    this.emitState();
+    return this.getState();
+  }
+
   private createTabRecord(): BrowserTabRecord {
     const id = crypto.randomUUID();
 

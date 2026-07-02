@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("mirrow", {
     createTab: (url?: string) => ipcRenderer.invoke("browser:create-tab", url) as Promise<BrowserState>,
     switchTab: (id: string) => ipcRenderer.invoke("browser:switch-tab", id) as Promise<BrowserState>,
     closeTab: (id: string) => ipcRenderer.invoke("browser:close-tab", id) as Promise<BrowserState>,
+    reorderTabs: (orderedIds: string[]) => ipcRenderer.invoke("browser:reorder-tabs", orderedIds) as Promise<BrowserState>,
     goBack: () => ipcRenderer.invoke("browser:go-back") as Promise<BrowserState>,
     goForward: () => ipcRenderer.invoke("browser:go-forward") as Promise<BrowserState>,
     reload: () => ipcRenderer.invoke("browser:reload") as Promise<BrowserState>,

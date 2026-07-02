@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ClipboardPaste, Menu, Plus, RefreshCw, Search, ShieldCheck, Star, X } from "lucide-react";
 import type { BrowserState } from "../../shared/types";
 import { resolveNavigationInput } from "../../shared/navigation";
@@ -17,6 +17,7 @@ type BrowserToolbarProps = {
   onCreateTab: () => Promise<BrowserState>;
   onSwitchTab: (id: string) => Promise<BrowserState>;
   onCloseTab: (id: string) => Promise<BrowserState>;
+  onReorderTabs: (orderedIds: string[]) => Promise<BrowserState>;
   onBack: () => void;
   onForward: () => void;
   onReload: () => void;
@@ -30,6 +31,7 @@ export function BrowserToolbar({
   onCreateTab,
   onSwitchTab,
   onCloseTab,
+  onReorderTabs,
   onBack,
   onForward,
   onReload,
@@ -43,6 +45,8 @@ export function BrowserToolbar({
   const [pendingUrl, setPendingUrl] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const [draggingTabId, setDraggingTabId] = useState("");
+  const [dragOverTabId, setDragOverTabId] = useState("");
 
   useEffect(() => {
     if (!isEditing && !pendingUrl) setValue(state.url);
@@ -190,6 +194,27 @@ export function BrowserToolbar({
 
   const tabs = state.tabs.length ? state.tabs : [{ id: state.activeTabId || "__active__", title: state.title, url: state.url, isLoading: state.isLoading }];
   const tabLabel = (title: string, url: string) => title || url || "New tab";
+  const reorderTabIds = (sourceId: string, targetId: string, placeAfter: boolean) => {
+    if (!sourceId || sourceId === targetId) return null;
+    const currentIds = tabs.map((tab) => tab.id).filter((id) => id !== "__active__");
+    const withoutSource = currentIds.filter((id) => id !== sourceId);
+    const targetIndex = withoutSource.indexOf(targetId);
+    if (targetIndex < 0) return null;
+    const insertIndex = placeAfter ? targetIndex + 1 : targetIndex;
+    const nextIds = [...withoutSource.slice(0, insertIndex), sourceId, ...withoutSource.slice(insertIndex)];
+    return nextIds.join("|") === currentIds.join("|") ? null : nextIds;
+  };
+
+  const onTabDrop = (event: DragEvent<HTMLButtonElement>, targetId: string) => {
+    event.preventDefault();
+    const sourceId = event.dataTransfer.getData("text/plain") || draggingTabId;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const placeAfter = event.clientX > rect.left + rect.width / 2;
+    const nextIds = reorderTabIds(sourceId, targetId, placeAfter);
+    setDraggingTabId("");
+    setDragOverTabId("");
+    if (nextIds) onReorderTabs(nextIds).catch(() => undefined);
+  };
 
   return (
     <div className="border-b border-[#3c4043] bg-[#202124] text-[#e8eaed]">
@@ -201,20 +226,48 @@ export function BrowserToolbar({
               <button
                 key={tab.id}
                 type="button"
-                className={`group flex h-8 min-w-[120px] max-w-[240px] flex-1 items-center gap-2 rounded-t-xl pl-3 pr-1 text-left text-xs transition ${
+                draggable={tab.id !== "__active__"}
+                className={`group flex h-8 min-w-[48px] max-w-[220px] flex-[1_1_220px] cursor-grab items-center gap-1 overflow-hidden rounded-t-xl pl-2 pr-1 text-left text-xs transition active:cursor-grabbing ${
                   active ? "bg-[#2b2c30] text-[#e8eaed]" : "bg-transparent text-[#bdc1c6] hover:bg-white/[0.06]"
+                } ${draggingTabId === tab.id ? "scale-[.98] opacity-45" : ""} ${
+                  dragOverTabId === tab.id && draggingTabId !== tab.id ? "shadow-[inset_0_-2px_0_#8ab4f8]" : ""
                 }`}
                 onClick={() => {
                   if (!active && tab.id !== "__active__") onSwitchTab(tab.id).catch(() => undefined);
                 }}
+                onDragStart={(event) => {
+                  setDraggingTabId(tab.id);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", tab.id);
+                }}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  if (draggingTabId && draggingTabId !== tab.id) setDragOverTabId(tab.id);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  if (draggingTabId && draggingTabId !== tab.id) setDragOverTabId(tab.id);
+                }}
+                onDragLeave={() => {
+                  if (dragOverTabId === tab.id) setDragOverTabId("");
+                }}
+                onDrop={(event) => onTabDrop(event, tab.id)}
+                onDragEnd={() => {
+                  setDraggingTabId("");
+                  setDragOverTabId("");
+                }}
                 title={tabLabel(tab.title, tab.url)}
               >
-                <span className={`h-3 w-3 shrink-0 rounded-full ${tab.isLoading ? "animate-pulse bg-[#fdd663]" : "bg-[#8ab4f8]"}`} />
+                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tab.isLoading ? "animate-pulse bg-[#fdd663]" : "bg-[#8ab4f8]"}`} />
                 <span className="min-w-0 flex-1 truncate">{tabLabel(tab.title, tab.url)}</span>
                 <span
                   role="button"
                   tabIndex={-1}
-                  className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#bdc1c6] opacity-80 hover:bg-white/[0.1] hover:opacity-100"
+                  draggable={false}
+                  className={`ml-auto h-5 w-5 shrink-0 items-center justify-center rounded-full text-[#bdc1c6] opacity-80 hover:bg-white/[0.1] hover:opacity-100 ${
+                    active ? "inline-flex" : "hidden group-hover:inline-flex"
+                  }`}
                   title="Close tab"
                   onClick={(event) => {
                     event.preventDefault();
@@ -222,20 +275,21 @@ export function BrowserToolbar({
                     if (tab.id !== "__active__") onCloseTab(tab.id).catch(() => undefined);
                   }}
                 >
-                  <X size={14} />
+                  <X size={12} />
                 </span>
               </button>
             );
           })}
+          <button
+            type="button"
+            className="mb-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#bdc1c6] hover:bg-white/[0.08]"
+            title="New tab"
+            onClick={() => onCreateTab().then(() => focusAddressBar()).catch(() => undefined)}
+          >
+            <Plus size={16} />
+          </button>
+          <div className="min-w-4 flex-1" />
         </div>
-        <button
-          type="button"
-          className="no-drag mb-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#bdc1c6] hover:bg-white/[0.08]"
-          title="New tab"
-          onClick={() => onCreateTab().then(() => focusAddressBar()).catch(() => undefined)}
-        >
-          <Plus size={16} />
-        </button>
       </div>
 
       <form onSubmit={submit} className="no-drag relative flex h-12 items-center gap-1 bg-[#2b2c30] px-3">
