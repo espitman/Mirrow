@@ -100,8 +100,8 @@ export function BrowserShell() {
       <BrowserToolbar
         state={browserState}
         onLoadUrl={loadUrl}
-        onCreateTab={async () => {
-          const nextState = await window.mirrow.browser.createTab();
+        onCreateTab={async (url) => {
+          const nextState = await window.mirrow.browser.createTab(url);
           setBrowserState(nextState);
           return nextState;
         }}

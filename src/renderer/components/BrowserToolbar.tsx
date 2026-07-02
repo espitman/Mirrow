@@ -1,4 +1,4 @@
-import { DragEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, FormEvent, KeyboardEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ClipboardPaste, Menu, Plus, RefreshCw, Search, ShieldCheck, Star, X } from "lucide-react";
 import type { BrowserState } from "../../shared/types";
 import { resolveNavigationInput } from "../../shared/navigation";
@@ -14,7 +14,7 @@ type AddressSuggestion = {
 type BrowserToolbarProps = {
   state: BrowserState;
   onLoadUrl: (url: string) => Promise<void>;
-  onCreateTab: () => Promise<BrowserState>;
+  onCreateTab: (url?: string) => Promise<BrowserState>;
   onSwitchTab: (id: string) => Promise<BrowserState>;
   onCloseTab: (id: string) => Promise<BrowserState>;
   onReorderTabs: (orderedIds: string[]) => Promise<BrowserState>;
@@ -47,6 +47,8 @@ export function BrowserToolbar({
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [draggingTabId, setDraggingTabId] = useState("");
   const [dragOverTabId, setDragOverTabId] = useState("");
+  const [hoverCard, setHoverCard] = useState<{ tabId: string; x: number; y: number } | null>(null);
+  const hoverCardTimer = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isEditing && !pendingUrl) setValue(state.url);
@@ -83,6 +85,12 @@ export function BrowserToolbar({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onCloseTab, onCreateTab, onReload, state.activeTabId]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverCardTimer.current) window.clearTimeout(hoverCardTimer.current);
+    };
+  }, []);
 
   const suggestions = useMemo(() => {
     if (!showSuggestions) return [];
@@ -215,9 +223,35 @@ export function BrowserToolbar({
     setDragOverTabId("");
     if (nextIds) onReorderTabs(nextIds).catch(() => undefined);
   };
+  const hideHoverCard = () => {
+    if (hoverCardTimer.current) {
+      window.clearTimeout(hoverCardTimer.current);
+      hoverCardTimer.current = null;
+    }
+    setHoverCard(null);
+  };
+  const scheduleHoverCard = (event: MouseEvent<HTMLButtonElement>, tabId: string) => {
+    if (draggingTabId) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (hoverCardTimer.current) window.clearTimeout(hoverCardTimer.current);
+    hoverCardTimer.current = window.setTimeout(() => {
+      setHoverCard({
+        tabId,
+        x: Math.min(Math.max(rect.left, 8), window.innerWidth - 328),
+        y: Math.min(rect.bottom + 8, window.innerHeight - 118),
+      });
+    }, 420);
+  };
+  const openTabMenu = (event: MouseEvent<HTMLButtonElement>, tabId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    hideHoverCard();
+    window.mirrow.browser.showTabMenu(tabId).catch(() => undefined);
+  };
+  const getHoverCardTab = () => tabs.find((tab) => tab.id === hoverCard?.tabId);
 
   return (
-    <div className="border-b border-[#3c4043] bg-[#202124] text-[#e8eaed]">
+    <div className="relative border-b border-[#3c4043] bg-[#202124] text-[#e8eaed]">
       <div className="drag-region flex h-10 items-end gap-1 overflow-hidden px-3 pt-2">
         <div className="no-drag flex min-w-0 flex-1 items-end gap-1 overflow-hidden">
           {tabs.map((tab) => {
@@ -235,7 +269,14 @@ export function BrowserToolbar({
                 onClick={() => {
                   if (!active && tab.id !== "__active__") onSwitchTab(tab.id).catch(() => undefined);
                 }}
+                onMouseEnter={(event) => scheduleHoverCard(event, tab.id)}
+                onMouseMove={(event) => {
+                  if (!hoverCard && !hoverCardTimer.current) scheduleHoverCard(event, tab.id);
+                }}
+                onMouseLeave={hideHoverCard}
+                onContextMenu={(event) => openTabMenu(event, tab.id)}
                 onDragStart={(event) => {
+                  hideHoverCard();
                   setDraggingTabId(tab.id);
                   event.dataTransfer.effectAllowed = "move";
                   event.dataTransfer.setData("text/plain", tab.id);
@@ -256,8 +297,9 @@ export function BrowserToolbar({
                 onDragEnd={() => {
                   setDraggingTabId("");
                   setDragOverTabId("");
+                  hideHoverCard();
                 }}
-                title={tabLabel(tab.title, tab.url)}
+                aria-label={tabLabel(tab.title, tab.url)}
               >
                 <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tab.isLoading ? "animate-pulse bg-[#fdd663]" : "bg-[#8ab4f8]"}`} />
                 <span className="min-w-0 flex-1 truncate">{tabLabel(tab.title, tab.url)}</span>
@@ -291,7 +333,23 @@ export function BrowserToolbar({
           <div className="min-w-4 flex-1" />
         </div>
       </div>
-
+      {hoverCard && getHoverCardTab() && !draggingTabId && (
+        <div
+          className="pointer-events-none fixed z-40 w-[320px] rounded-xl border border-[#3c4043] bg-[#2b2c30] px-4 py-3 text-left shadow-2xl"
+          style={{ left: hoverCard.x, top: hoverCard.y }}
+        >
+          {(() => {
+            const tab = getHoverCardTab();
+            if (!tab) return null;
+            return (
+              <>
+                <div className="truncate text-sm font-medium text-[#e8eaed]">{tabLabel(tab.title, tab.url)}</div>
+                <div className="mt-1 truncate text-xs text-[#9aa0a6]">{tab.url || "New tab"}</div>
+              </>
+            );
+          })()}
+        </div>
+      )}
       <form onSubmit={submit} className="no-drag relative flex h-12 items-center gap-1 bg-[#2b2c30] px-3">
         <button type="button" className="chrome-icon-button" onClick={onBack} disabled={!state.canGoBack} title="Back">
           <ArrowLeft size={17} />

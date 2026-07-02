@@ -1,4 +1,4 @@
-import { BrowserView, BrowserWindow } from "electron";
+import { BrowserView, BrowserWindow, Menu } from "electron";
 import type {
   BrowserBounds,
   BrowserState,
@@ -99,6 +99,98 @@ export class BrowserController {
     }
 
     this.emitState();
+    return this.getState();
+  }
+
+  createTabToRight(targetId: string, rawUrl?: string) {
+    const targetIndex = this.tabs.findIndex((tab) => tab.id === targetId);
+    const tab = this.createTabRecord();
+    const insertIndex = targetIndex >= 0 ? targetIndex + 1 : this.tabs.length;
+    this.tabs.splice(insertIndex, 0, tab);
+    this.activateTab(tab.id);
+    if (rawUrl) {
+      this.loadUrl(rawUrl).catch((error: unknown) => {
+        if (!isNavigationAbortError(error)) this.sendError(readError(error));
+      });
+    }
+    this.emitState();
+    return this.getState();
+  }
+
+  duplicateTab(id: string) {
+    const tab = this.tabs.find((item) => item.id === id);
+    const url = tab?.view.webContents.getURL();
+    if (!url) return this.getState();
+    return this.createTabToRight(id, url);
+  }
+
+  reloadTab(id: string) {
+    const tab = this.tabs.find((item) => item.id === id);
+    if (!tab) return this.getState();
+    tab.isLoading = true;
+    tab.view.webContents.reload();
+    this.emitState();
+    return this.getState();
+  }
+
+  async closeOtherTabs(id: string) {
+    const idsToClose = this.tabs.map((tab) => tab.id).filter((tabId) => tabId !== id);
+    for (const tabId of idsToClose) this.closeTab(tabId);
+    return this.getState();
+  }
+
+  async closeTabsToRight(id: string) {
+    const targetIndex = this.tabs.findIndex((tab) => tab.id === id);
+    if (targetIndex < 0) return this.getState();
+    const idsToClose = this.tabs.slice(targetIndex + 1).map((tab) => tab.id);
+    for (const tabId of idsToClose) this.closeTab(tabId);
+    return this.getState();
+  }
+
+  showTabContextMenu(id: string) {
+    const tabIndex = this.tabs.findIndex((tab) => tab.id === id);
+    const tab = this.tabs[tabIndex];
+    if (!tab) return this.getState();
+
+    const hasUrl = Boolean(tab.view.webContents.getURL());
+    const hasOtherTabs = this.tabs.length > 1;
+    const hasTabsToRight = tabIndex >= 0 && tabIndex < this.tabs.length - 1;
+    const menu = Menu.buildFromTemplate([
+      {
+        label: "New Tab to the Right",
+        click: () => this.createTabToRight(id),
+      },
+      {
+        label: "Duplicate",
+        enabled: hasUrl,
+        click: () => this.duplicateTab(id),
+      },
+      { type: "separator" },
+      {
+        label: "Reload",
+        click: () => this.reloadTab(id),
+      },
+      { type: "separator" },
+      {
+        label: "Close",
+        click: () => this.closeTab(id),
+      },
+      {
+        label: "Close Other Tabs",
+        enabled: hasOtherTabs,
+        click: () => {
+          this.closeOtherTabs(id).catch((error: unknown) => this.sendError(readError(error)));
+        },
+      },
+      {
+        label: "Close Tabs to the Right",
+        enabled: hasTabsToRight,
+        click: () => {
+          this.closeTabsToRight(id).catch((error: unknown) => this.sendError(readError(error)));
+        },
+      },
+    ]);
+    menu.popup({ window: this.window });
     return this.getState();
   }
 

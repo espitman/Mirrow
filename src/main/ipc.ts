@@ -14,6 +14,7 @@ export function registerIpc(browser: BrowserController) {
     "browser:switch-tab",
     "browser:close-tab",
     "browser:reorder-tabs",
+    "browser:show-tab-menu",
     "browser:go-back",
     "browser:go-forward",
     "browser:reload",
@@ -43,6 +44,7 @@ export function registerIpc(browser: BrowserController) {
   ipcMain.handle("browser:switch-tab", (_event, id: string) => browser.switchTab(String(id)));
   ipcMain.handle("browser:close-tab", (_event, id: string) => browser.closeTab(String(id)));
   ipcMain.handle("browser:reorder-tabs", (_event, orderedIds: string[]) => browser.reorderTabs(Array.isArray(orderedIds) ? orderedIds.map(String) : []));
+  ipcMain.handle("browser:show-tab-menu", (_event, id: string) => browser.showTabContextMenu(String(id)));
   ipcMain.handle("browser:go-back", () => browser.goBack());
   ipcMain.handle("browser:go-forward", () => browser.goForward());
   ipcMain.handle("browser:reload", () => browser.reload());
